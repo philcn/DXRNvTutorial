@@ -130,17 +130,4 @@ private:
 
 	UINT AllocateDescriptor(D3D12_CPU_DESCRIPTOR_HANDLE* cpuDescriptor, UINT descriptorIndexToUse = UINT_MAX);
     WRAPPED_GPU_POINTER CreateFallbackWrappedPointer(ID3D12Resource* resource, UINT bufferNumElements);
-	
-	////////////////////////////////////////////////////////////////////////////////
-
-	void SerializeAndCreateRaytracingRootSignature(D3D12_ROOT_SIGNATURE_DESC& desc, ComPtr<ID3D12RootSignature>* rootSig);
-	void CreateRootSignatures();
-	void CreateRaytracingPipelineStateObject();
-	void CreateLocalRootSignatureSubobjects(CD3D12_STATE_OBJECT_DESC* raytracingPipeline);
-	void BuildShaderTables();
-	void DoRaytracing2();
-
-	ComPtr<ID3D12Resource> m_missShaderTable;
-	ComPtr<ID3D12Resource> m_hitGroupShaderTable;
-	ComPtr<ID3D12Resource> m_rayGenShaderTable;
 };

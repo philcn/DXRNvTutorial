@@ -90,12 +90,10 @@ void DXRNvTutorialApp::CreateDeviceDependentResources()
     CreateRaytracingInterfaces();
 
     // Create root signatures for the shaders.
-//	mGlobalRootSignature = CreateGlobalRootSignature();
-	CreateRootSignatures();
+	mGlobalRootSignature = CreateGlobalRootSignature();
 
     // Create a raytracing pipeline state object which defines the binding of shaders, state and resources to be used during raytracing.
-//	CreateRaytracingPipeline();
-	CreateRaytracingPipelineStateObject();
+	CreateRaytracingPipeline();
 
     // Create a heap for descriptors.
     CreateDescriptorHeap();
@@ -109,8 +107,7 @@ void DXRNvTutorialApp::CreateDeviceDependentResources()
     // Create constant buffers for the geometry and the scene.
 
     // Build shader tables, which define shaders and their local root arguments.
-//	CreateShaderBindingTable(); 
-	BuildShaderTables();
+	CreateShaderBindingTable(); 
 
     InitShaderResourceHeap();
 }
@@ -139,7 +136,6 @@ void DXRNvTutorialApp::CreateDescriptorHeap()
 	// Allocate a heap for 3 descriptors:
 	// 1 - raytracing output texture SRV
 	// 2 - bottom and top level acceleration structure fallback wrapped pointer UAVs
-	// /* 2 - vertex and index buffer SRVs */
 	descriptorHeapDesc.NumDescriptors = 3; 
 	descriptorHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 	descriptorHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
@@ -566,8 +562,7 @@ void DXRNvTutorialApp::OnRender()
     m_deviceResources->Prepare();
 
 	if (mRaytracingEnabled) {
-//		DoRaytracing();
-		DoRaytracing2();
+		DoRaytracing();
 		CopyRaytracingOutputToBackbuffer();
 
 		m_deviceResources->Present(D3D12_RESOURCE_STATE_PRESENT);
@@ -675,243 +670,4 @@ UINT DXRNvTutorialApp::AllocateDescriptor(D3D12_CPU_DESCRIPTOR_HANDLE* cpuDescri
     }
     *cpuDescriptor = CD3DX12_CPU_DESCRIPTOR_HANDLE(descriptorHeapCpuBase, descriptorIndexToUse, mDescriptorSize);
     return descriptorIndexToUse;
-}
-
-
-////////////////////////////////////////////////////////////////////////////////
-
-// Local root signature and shader association
-// This is a root signature that enables a shader to have unique arguments that come from shader tables.
-void DXRNvTutorialApp::CreateLocalRootSignatureSubobjects(CD3D12_STATE_OBJECT_DESC* raytracingPipeline)
-{
-	// Local root signature to be used in a hit group.
-	auto localRootSignature = raytracingPipeline->CreateSubobject<CD3D12_LOCAL_ROOT_SIGNATURE_SUBOBJECT>();
-	localRootSignature->SetRootSignature(mRayGenSignature.Get());
-	// Define explicit shader association for the local root signature. 
-	// In this sample, this could be ommited for convenience since it matches the default association.
-	{
-		auto rootSignatureAssociation = raytracingPipeline->CreateSubobject<CD3D12_SUBOBJECT_TO_EXPORTS_ASSOCIATION_SUBOBJECT>();
-		rootSignatureAssociation->SetSubobjectToAssociate(*localRootSignature);
-		rootSignatureAssociation->AddExport(L"RayGen");
-	}
-
-	// Empty local root signature to be used in a ray gen and a miss shader.
-	{
-		auto localRootSignature = raytracingPipeline->CreateSubobject<CD3D12_LOCAL_ROOT_SIGNATURE_SUBOBJECT>();
-		localRootSignature->SetRootSignature(mMissSignature.Get());
-		// Shader association
-		auto rootSignatureAssociation = raytracingPipeline->CreateSubobject<CD3D12_SUBOBJECT_TO_EXPORTS_ASSOCIATION_SUBOBJECT>();
-		rootSignatureAssociation->SetSubobjectToAssociate(*localRootSignature);
-		rootSignatureAssociation->AddExport(L"Miss");
-		rootSignatureAssociation->AddExport(L"HitGroup");
-	}
-}
-
-// Create a raytracing pipeline state object (RTPSO).
-// An RTPSO represents a full set of shaders reachable by a DispatchRays() call,
-// with all configuration options resolved, such as local signatures and other state.
-void DXRNvTutorialApp::CreateRaytracingPipelineStateObject()
-{
-	mRayGenSignature = CreateRayGenSignature();
-	mMissSignature = CreateMissSignature();
-	mHitSignature = CreateHitSignature();
-
-	// Create 7 subobjects that combine into a RTPSO:
-	// Subobjects need to be associated with DXIL exports (i.e. shaders) either by way of default or explicit associations.
-	// Default association applies to every exported shader entrypoint that doesn't have any of the same type of subobject associated with it.
-	// This simple sample utilizes default shader association except for local root signature subobject
-	// which has an explicit association specified purely for demonstration purposes.
-	// 1 - DXIL library
-	// 1 - Triangle hit group
-	// 1 - Shader config
-	// 2 - Local root signature and association
-	// 1 - Global root signature
-	// 1 - Pipeline config
-	CD3D12_STATE_OBJECT_DESC raytracingPipeline{ D3D12_STATE_OBJECT_TYPE_RAYTRACING_PIPELINE };
-
-
-	// DXIL library
-	// This contains the shaders and their entrypoints for the state object.
-	// Since shaders are not considered a subobject, they need to be passed in via DXIL library subobjects.
-	auto lib = raytracingPipeline.CreateSubobject<CD3D12_DXIL_LIBRARY_SUBOBJECT>();
-	D3D12_SHADER_BYTECODE libdxil = CD3DX12_SHADER_BYTECODE((void *)g_pRaytracing, ARRAYSIZE(g_pRaytracing));
-	lib->SetDXILLibrary(&libdxil);
-	// Define which shader exports to surface from the library.
-	// If no shader exports are defined for a DXIL library subobject, all shaders will be surfaced.
-	// In this sample, this could be ommited for convenience since the sample uses all shaders in the library. 
-	{
-		lib->DefineExport(L"RayGen");
-		lib->DefineExport(L"ClosestHit");
-		lib->DefineExport(L"Miss");
-	}
-
-	// Triangle hit group
-	// A hit group specifies closest hit, any hit and intersection shaders to be executed when a ray intersects the geometry's triangle/AABB.
-	// In this sample, we only use triangle geometry with a closest hit shader, so others are not set.
-	auto hitGroup = raytracingPipeline.CreateSubobject<CD3D12_HIT_GROUP_SUBOBJECT>();
-	hitGroup->SetClosestHitShaderImport(L"ClosestHit");
-	hitGroup->SetHitGroupExport(L"HitGroup");
-
-	// Shader config
-	// Defines the maximum sizes in bytes for the ray payload and attribute structure.
-	auto shaderConfig = raytracingPipeline.CreateSubobject<CD3D12_RAYTRACING_SHADER_CONFIG_SUBOBJECT>();
-	UINT payloadSize = sizeof(XMFLOAT4);    // float4 pixelColor
-	UINT attributeSize = sizeof(XMFLOAT2);  // float2 barycentrics
-	shaderConfig->Config(payloadSize, attributeSize);
-
-	// Local root signature and shader association
-	// This is a root signature that enables a shader to have unique arguments that come from shader tables.
-	CreateLocalRootSignatureSubobjects(&raytracingPipeline);
-
-	// Global root signature
-	// This is a root signature that is shared across all raytracing shaders invoked during a DispatchRays() call.
-	auto globalRootSignature = raytracingPipeline.CreateSubobject<CD3D12_ROOT_SIGNATURE_SUBOBJECT>();
-	globalRootSignature->SetRootSignature(mGlobalRootSignature.Get());
-
-	// Pipeline config
-	// Defines the maximum TraceRay() recursion depth.
-	auto pipelineConfig = raytracingPipeline.CreateSubobject<CD3D12_RAYTRACING_PIPELINE_CONFIG_SUBOBJECT>();
-	// PERFOMANCE TIP: Set max recursion depth as low as needed 
-	// as drivers may apply optimization strategies for low recursion depths.
-	UINT maxRecursionDepth = 1; // ~ primary rays only. 
-	pipelineConfig->Config(maxRecursionDepth);
-
-#if _DEBUG
-	PrintStateObjectDesc(raytracingPipeline);
-#endif
-
-	// Create the state object.
-	ThrowIfFailed(mFallbackDevice->CreateStateObject(raytracingPipeline, IID_PPV_ARGS(&mFallbackStateObject)), L"Couldn't create DirectX Raytracing state object.\n");
-}
-
-void DXRNvTutorialApp::BuildShaderTables()
-{
-	auto device = m_deviceResources->GetD3DDevice();
-
-	void* rayGenShaderIdentifier;
-	void* missShaderIdentifier;
-	void* hitGroupShaderIdentifier;
-
-	auto GetShaderIdentifiers = [&](auto* stateObjectProperties)
-	{
-		rayGenShaderIdentifier = stateObjectProperties->GetShaderIdentifier(L"RayGen");
-		missShaderIdentifier = stateObjectProperties->GetShaderIdentifier(L"Miss");
-		hitGroupShaderIdentifier = stateObjectProperties->GetShaderIdentifier(L"HitGroup");
-	};
-
-	// Get shader identifiers.
-	UINT shaderIdentifierSize;
-	GetShaderIdentifiers(mFallbackStateObject.Get());
-	shaderIdentifierSize = mFallbackDevice->GetShaderIdentifierSize();
-
-	// Ray gen shader table
-	{
-		UINT numShaderRecords = 1;
-		UINT shaderRecordSize = shaderIdentifierSize;
-		ShaderTable rayGenShaderTable(device, numShaderRecords, shaderRecordSize, L"RayGenShaderTable");
-		rayGenShaderTable.push_back(ShaderRecord(rayGenShaderIdentifier, shaderIdentifierSize));
-		m_rayGenShaderTable = rayGenShaderTable.GetResource();
-	}
-
-	// Miss shader table
-	{
-		UINT numShaderRecords = 1;
-		UINT shaderRecordSize = shaderIdentifierSize;
-		ShaderTable missShaderTable(device, numShaderRecords, shaderRecordSize, L"MissShaderTable");
-		missShaderTable.push_back(ShaderRecord(missShaderIdentifier, shaderIdentifierSize));
-		m_missShaderTable = missShaderTable.GetResource();
-	}
-
-	// Hit group shader table
-	{
-		UINT numShaderRecords = 1;
-		UINT shaderRecordSize = shaderIdentifierSize;
-		ShaderTable hitGroupShaderTable(device, numShaderRecords, shaderRecordSize, L"HitGroupShaderTable");
-		hitGroupShaderTable.push_back(ShaderRecord(hitGroupShaderIdentifier, shaderIdentifierSize));
-		m_hitGroupShaderTable = hitGroupShaderTable.GetResource();
-	}
-}
-
-void DXRNvTutorialApp::DoRaytracing2()
-{
-	auto commandList = m_deviceResources->GetCommandList();
-	auto frameIndex = m_deviceResources->GetCurrentFrameIndex();
-
-	auto DispatchRays = [&](auto* commandList, auto* stateObject, auto* dispatchDesc)
-	{
-		// Since each shader table has only one shader record, the stride is same as the size.
-		dispatchDesc->HitGroupTable.StartAddress = m_hitGroupShaderTable->GetGPUVirtualAddress();
-		dispatchDesc->HitGroupTable.SizeInBytes = m_hitGroupShaderTable->GetDesc().Width;
-		dispatchDesc->HitGroupTable.StrideInBytes = dispatchDesc->HitGroupTable.SizeInBytes;
-		dispatchDesc->MissShaderTable.StartAddress = m_missShaderTable->GetGPUVirtualAddress();
-		dispatchDesc->MissShaderTable.SizeInBytes = m_missShaderTable->GetDesc().Width;
-		dispatchDesc->MissShaderTable.StrideInBytes = dispatchDesc->MissShaderTable.SizeInBytes;
-		dispatchDesc->RayGenerationShaderRecord.StartAddress = m_rayGenShaderTable->GetGPUVirtualAddress();
-		dispatchDesc->RayGenerationShaderRecord.SizeInBytes = m_rayGenShaderTable->GetDesc().Width;
-		dispatchDesc->Width = m_width;
-		dispatchDesc->Height = m_height;
-		commandList->DispatchRays(stateObject, dispatchDesc);
-	};
-
-	auto SetCommonPipelineState = [&](auto* descriptorSetCommandList)
-	{
-		descriptorSetCommandList->SetDescriptorHeaps(1, mDescriptorHeap.GetAddressOf());
-		// Set index and successive vertex buffer decriptor tables
-//		commandList->SetComputeRootDescriptorTable(GlobalRootSignatureParams::OutputViewSlot, mOutputResourceUAVGpuDescriptor);
-	};
-
-	commandList->SetComputeRootSignature(mGlobalRootSignature.Get());
-
-	// Bind the heaps, acceleration structure and dispatch rays.    
-	D3D12_FALLBACK_DISPATCH_RAYS_DESC dispatchDesc = {};
-	SetCommonPipelineState(mFallbackCommandList.Get());
-	mFallbackCommandList->SetTopLevelAccelerationStructure(GlobalRootSignatureParams::AccelerationStructureSlot, mTlasWrappedPointer);
-	DispatchRays(mFallbackCommandList.Get(), mFallbackStateObject.Get(), &dispatchDesc);
-}
-
-void DXRNvTutorialApp::SerializeAndCreateRaytracingRootSignature(D3D12_ROOT_SIGNATURE_DESC& desc, ComPtr<ID3D12RootSignature>* rootSig)
-{
-	auto device = m_deviceResources->GetD3DDevice();
-	ComPtr<ID3DBlob> blob;
-	ComPtr<ID3DBlob> error;
-
-	ThrowIfFailed(mFallbackDevice->D3D12SerializeRootSignature(&desc, D3D_ROOT_SIGNATURE_VERSION_1, &blob, &error), error ? static_cast<wchar_t*>(error->GetBufferPointer()) : nullptr);
-	ThrowIfFailed(mFallbackDevice->CreateRootSignature(1, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&(*rootSig))));
-}
-
-void DXRNvTutorialApp::CreateRootSignatures()
-{
-	auto device = m_deviceResources->GetD3DDevice();
-
-	// Global Root Signature
-	// This is a root signature that is shared across all raytracing shaders invoked during a DispatchRays() call.
-	{
-		CD3DX12_DESCRIPTOR_RANGE ranges[2]; // Perfomance TIP: Order from most frequent to least frequent.
-		ranges[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0);  // 1 output texture
-		ranges[1].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1);  // 1 static vertex buffer.
-
-		CD3DX12_ROOT_PARAMETER rootParameters[GlobalRootSignatureParams::Count];
-		rootParameters[GlobalRootSignatureParams::OutputViewSlot].InitAsDescriptorTable(1, &ranges[0]);
-		rootParameters[GlobalRootSignatureParams::AccelerationStructureSlot].InitAsShaderResourceView(0);
-		CD3DX12_ROOT_SIGNATURE_DESC globalRootSignatureDesc(ARRAYSIZE(rootParameters), rootParameters);
-		SerializeAndCreateRaytracingRootSignature(globalRootSignatureDesc, &mGlobalRootSignature);
-	}
-
-#if 0
-	// Local Root Signature
-	// This is a root signature that enables a shader to have unique arguments that come from shader tables.
-	{
-		CD3DX12_ROOT_PARAMETER rootParameters[LocalRootSignatureParams::Count];
-		rootParameters[LocalRootSignatureParams::CubeConstantSlot].InitAsConstants(SizeOfInUint32(m_cubeCB), 1);
-		CD3DX12_ROOT_SIGNATURE_DESC localRootSignatureDesc(ARRAYSIZE(rootParameters), rootParameters);
-		localRootSignatureDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE;
-		SerializeAndCreateRaytracingRootSignature(localRootSignatureDesc, &m_raytracingLocalRootSignature);
-	}
-	// Empty local root signature
-	{
-		CD3DX12_ROOT_SIGNATURE_DESC localRootSignatureDesc(D3D12_DEFAULT);
-		localRootSignatureDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE;
-		SerializeAndCreateRaytracingRootSignature(localRootSignatureDesc, &m_raytracingLocalRootSignatureEmpty);
-	}
-#endif
 }
