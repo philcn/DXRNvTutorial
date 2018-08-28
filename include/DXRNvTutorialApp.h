@@ -24,9 +24,9 @@
 
 struct AccelerationStructure
 {
-	ComPtr<ID3D12Resource> mScratch;
-	ComPtr<ID3D12Resource> mResult;
-	ComPtr<ID3D12Resource> mInstanceDesc;
+    ComPtr<ID3D12Resource> mScratch;
+    ComPtr<ID3D12Resource> mResult;
+    ComPtr<ID3D12Resource> mInstanceDesc;
 };
 
 class DXRNvTutorialApp : public DXSample
@@ -51,40 +51,40 @@ private:
     static const UINT FrameCount = 3;
 
     bool mUseDXRDriver;
-	bool mRaytracingEnabled;
+    bool mRaytracingEnabled;
 
     // Raytracing Fallback Layer (FL) attributes
     ComPtr<ID3D12RaytracingFallbackDevice> mFallbackDevice;
     ComPtr<ID3D12RaytracingFallbackCommandList> mFallbackCommandList;
 
-	// Descriptors
-	ComPtr<ID3D12DescriptorHeap> mDescriptorHeap;
-	UINT mDescriptorsAllocated;
-	UINT mDescriptorSize;
+    // Descriptors
+    ComPtr<ID3D12DescriptorHeap> mDescriptorHeap;
+    UINT mDescriptorsAllocated;
+    UINT mDescriptorSize;
 
-	// Geometries
-	ComPtr<ID3D12Resource> mVertexBuffer;
-	std::vector<std::pair<ComPtr<ID3D12Resource>, DirectX::XMMATRIX>> mInstances;
+    // Geometries
+    ComPtr<ID3D12Resource> mVertexBuffer;
+    std::vector<std::pair<ComPtr<ID3D12Resource>, DirectX::XMMATRIX>> mInstances;
 
-	// Acceleration structures
-	ComPtr<ID3D12Resource> mBlas;
-	AccelerationStructure mTlas;
-	WRAPPED_GPU_POINTER mTlasWrappedPointer;
+    // Acceleration structures
+    ComPtr<ID3D12Resource> mBlas;
+    AccelerationStructure mTlas;
+    WRAPPED_GPU_POINTER mTlasWrappedPointer;
 
-	// Pipeline
-	ComPtr<ID3D12RootSignature> mGlobalRootSignature;
-	ComPtr<ID3D12RootSignature> mRayGenSignature;
-	ComPtr<ID3D12RootSignature> mHitSignature;
-	ComPtr<ID3D12RootSignature> mMissSignature;
+    // Pipeline
+    ComPtr<ID3D12RootSignature> mGlobalRootSignature;
+    ComPtr<ID3D12RootSignature> mRayGenSignature;
+    ComPtr<ID3D12RootSignature> mHitSignature;
+    ComPtr<ID3D12RootSignature> mMissSignature;
     ComPtr<ID3D12RaytracingFallbackStateObject> mFallbackStateObject;
 
-	// Raytracing output resources
-	ComPtr<ID3D12Resource> mOutputResource;
-	D3D12_GPU_DESCRIPTOR_HANDLE mOutputResourceUAVGpuDescriptor;
+    // Raytracing output resources
+    ComPtr<ID3D12Resource> mOutputResource;
+    D3D12_GPU_DESCRIPTOR_HANDLE mOutputResourceUAVGpuDescriptor;
 
-	// Shader table
-	nv_helpers_dx12::ShaderBindingTableGenerator mShaderTableGenerator;
-	ComPtr<ID3D12Resource> mShaderTable;
+    // Shader table
+    nv_helpers_dx12::ShaderBindingTableGenerator mShaderTableGenerator;
+    ComPtr<ID3D12Resource> mShaderTable;
 
     // Application state
     StepTimer mTimer;
@@ -92,25 +92,25 @@ private:
     void InitializeScene();
 
     void CreateRaytracingInterfaces();
-	void CreateDescriptorHeap();
-	void CreateGeometries();
+    void CreateDescriptorHeap();
+    void CreateGeometries();
 
-	AccelerationStructure CreateBottomLevelAS(std::vector<std::pair<ComPtr<ID3D12Resource>, uint32_t>> vertexBuffers);
-	AccelerationStructure CreateTopLevelAS(const std::vector<std::pair<ComPtr<ID3D12Resource>, DirectX::XMMATRIX>> &instances, UINT &outResultSizeBytes);
-	void CreateAccelerationStructures();
+    AccelerationStructure CreateBottomLevelAS(std::vector<std::pair<ComPtr<ID3D12Resource>, uint32_t>> vertexBuffers);
+    AccelerationStructure CreateTopLevelAS(const std::vector<std::pair<ComPtr<ID3D12Resource>, DirectX::XMMATRIX>> &instances, UINT &outResultSizeBytes);
+    void CreateAccelerationStructures();
 
-	void CreateGlobalRootSignature();
-	ComPtr<ID3D12RootSignature> CreateRayGenSignature();
-	ComPtr<ID3D12RootSignature> CreateMissSignature();
-	ComPtr<ID3D12RootSignature> CreateHitSignature();
+    void CreateGlobalRootSignature();
+    ComPtr<ID3D12RootSignature> CreateRayGenSignature();
+    ComPtr<ID3D12RootSignature> CreateMissSignature();
+    ComPtr<ID3D12RootSignature> CreateHitSignature();
 
-	void CreateRaytracingPipeline();
-	void CreateShaderBindingTable();
+    void CreateRaytracingPipeline();
+    void CreateShaderBindingTable();
 
-	void CreateRaytracingOutputBuffer();
+    void CreateRaytracingOutputBuffer();
 
     void DoRaytracing();
-	void CopyRaytracingOutputToBackbuffer();
+    void CopyRaytracingOutputToBackbuffer();
 
     void CreateDeviceDependentResources();
     void CreateWindowSizeDependentResources();
@@ -118,8 +118,8 @@ private:
     void ReleaseWindowSizeDependentResources();
 
     void CalculateFrameStats();
-	void SerializeAndCreateRaytracingRootSignature(D3D12_ROOT_SIGNATURE_DESC& desc, ComPtr<ID3D12RootSignature>* rootSig);
-	UINT AllocateDescriptor(D3D12_CPU_DESCRIPTOR_HANDLE* cpuDescriptor, UINT descriptorIndexToUse = UINT_MAX);
+    void SerializeAndCreateRaytracingRootSignature(D3D12_ROOT_SIGNATURE_DESC& desc, ComPtr<ID3D12RootSignature>* rootSig);
+    UINT AllocateDescriptor(D3D12_CPU_DESCRIPTOR_HANDLE* cpuDescriptor, UINT descriptorIndexToUse = UINT_MAX);
     WRAPPED_GPU_POINTER CreateFallbackWrappedPointer(ID3D12Resource* resource, UINT bufferNumElements);
     void EnableDXRExperimentalFeatures(IDXGIAdapter1* adapter);
 };
