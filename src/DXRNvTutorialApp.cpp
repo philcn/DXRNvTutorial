@@ -25,6 +25,14 @@
 using namespace std;
 using namespace DX;
 
+namespace GlobalRootSignatureParams {
+	enum Value {
+		AccelerationStructureSlot = 0,
+		OutputViewSlot,
+		Count 
+	};
+}
+
 DXRNvTutorialApp::DXRNvTutorialApp(UINT width, UINT height, std::wstring name) :
     DXSample(width, height, name),
     mUseDXRDriver(false),
@@ -32,24 +40,6 @@ DXRNvTutorialApp::DXRNvTutorialApp(UINT width, UINT height, std::wstring name) :
 	mDescriptorsAllocated(0)
 {
     UpdateForSizeChange(width, height);
-}
-
-void DXRNvTutorialApp::EnableDXRExperimentalFeatures(IDXGIAdapter1* adapter)
-{
-    // DXR is an experimental feature and needs to be enabled before creating a D3D12 device.
-    mUseDXRDriver = EnableRaytracing(adapter);
-
-    if (!mUseDXRDriver) {
-        OutputDebugString(
-            L"Could not enable raytracing driver (D3D12EnableExperimentalFeatures() failed).\n" \
-            L"Possible reasons:\n" \
-            L"  1) your OS is not in developer mode.\n" \
-            L"  2) your GPU driver doesn't match the D3D12 runtime loaded by the app (d3d12.dll and friends).\n" \
-            L"  3) your D3D12 runtime doesn't match the D3D12 headers used by your app (in particular, the GUID passed to D3D12EnableExperimentalFeatures).\n\n");
-
-        OutputDebugString(L"Enabling compute based fallback raytracing support.\n");
-        ThrowIfFalse(EnableComputeRaytracingFallback(adapter), L"Could not enable compute based fallback raytracing support (D3D12EnableExperimentalFeatures() failed).\n");
-    }
 }
 
 void DXRNvTutorialApp::OnInit()
@@ -78,7 +68,6 @@ void DXRNvTutorialApp::OnInit()
     CreateWindowSizeDependentResources();
 }
 
-// Initialize scene rendering parameters.
 void DXRNvTutorialApp::InitializeScene()
 {
     auto frameIndex = m_deviceResources->GetCurrentFrameIndex();
@@ -86,45 +75,44 @@ void DXRNvTutorialApp::InitializeScene()
 
 void DXRNvTutorialApp::CreateDeviceDependentResources()
 {
-    // Create raytracing interfaces: raytracing device and commandlist.
     CreateRaytracingInterfaces();
 
-    // Create root signatures for the shaders.
-	mGlobalRootSignature = CreateGlobalRootSignature();
+	CreateGlobalRootSignature();
 
-    // Create a raytracing pipeline state object which defines the binding of shaders, state and resources to be used during raytracing.
 	CreateRaytracingPipeline();
 
-    // Create a heap for descriptors.
     CreateDescriptorHeap();
 
-    // Build geometry to be used in the sample.
 	CreateGeometries();
 
-    // Build raytracing acceleration structures from the generated geometry.
 	CreateAccelerationStructures();
 
-    // Create constant buffers for the geometry and the scene.
+    // CreateConstantBuffers();
 
-    // Build shader tables, which define shaders and their local root arguments.
 	CreateShaderBindingTable(); 
-
-    InitShaderResourceHeap();
 }
 
-// Create raytracing device and command list.
+void DXRNvTutorialApp::CreateWindowSizeDependentResources()
+{
+	CreateRaytracingOutputBuffer();
+
+	// UpdateCameraMatrices();
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 void DXRNvTutorialApp::CreateRaytracingInterfaces()
 {
     auto device = m_deviceResources->GetD3DDevice();
     auto commandList = m_deviceResources->GetCommandList();
 
-	// Only support fallback layer
+	// Only support fallback layer now
     if (!mUseDXRDriver) {
         CreateRaytracingFallbackDeviceFlags createDeviceFlags = CreateRaytracingFallbackDeviceFlags::None;
         ThrowIfFailed(D3D12CreateRaytracingFallbackDevice(device, createDeviceFlags, 0, IID_PPV_ARGS(&mFallbackDevice)));
         mFallbackDevice->QueryRaytracingCommandList(commandList, IID_PPV_ARGS(&mFallbackCommandList));
-    } else { // DirectX Raytracing
-		assert(0);
+    } else { 
+		assert(0); // DirectX Raytracing
 	}
 }
 
@@ -145,6 +133,8 @@ void DXRNvTutorialApp::CreateDescriptorHeap()
 
 	mDescriptorSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void DXRNvTutorialApp::CreateGeometries()
 {
@@ -281,14 +271,32 @@ void DXRNvTutorialApp::CreateAccelerationStructures()
 	mTlas = tlas;
 }
 
-ComPtr<ID3D12RootSignature> DXRNvTutorialApp::CreateRayGenSignature()
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void DXRNvTutorialApp::CreateGlobalRootSignature()
 {
+#if 0
 	nv_helpers_dx12::RootSignatureGenerator rootSigGenerator;
 	rootSigGenerator.AddHeapRangesParameter({
 		{0 /*u0*/, 1 /*1 descriptor*/, 0 /*space 0*/, D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0 /*heap slot for this UAV*/}, // output buffer
 		{0 /*t0*/, 1, 0, D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1} // Tlas
 	});
+	return rootSigGenerator.Generate(mFallbackDevice.Get(), true);
+#else
+	CD3DX12_DESCRIPTOR_RANGE ranges[1]; // Perfomance TIP: Order from most frequent to least frequent.
+	ranges[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0); // 1 output texture
 
+	CD3DX12_ROOT_PARAMETER rootParameters[GlobalRootSignatureParams::Count];
+	rootParameters[GlobalRootSignatureParams::AccelerationStructureSlot].InitAsShaderResourceView(0);
+	rootParameters[GlobalRootSignatureParams::OutputViewSlot].InitAsDescriptorTable(1, &ranges[0]);
+	CD3DX12_ROOT_SIGNATURE_DESC globalRootSignatureDesc(ARRAYSIZE(rootParameters), rootParameters);
+	SerializeAndCreateRaytracingRootSignature(globalRootSignatureDesc, &mGlobalRootSignature);
+#endif
+}
+
+ComPtr<ID3D12RootSignature> DXRNvTutorialApp::CreateRayGenSignature()
+{
+	nv_helpers_dx12::RootSignatureGenerator rootSigGenerator;
 	return rootSigGenerator.Generate(mFallbackDevice.Get(), true);
 }
 
@@ -304,11 +312,7 @@ ComPtr<ID3D12RootSignature> DXRNvTutorialApp::CreateHitSignature()
 	return rootSigGenerator.Generate(mFallbackDevice.Get(), true);
 }
 
-ComPtr<ID3D12RootSignature> DXRNvTutorialApp::CreateGlobalRootSignature()
-{
-	nv_helpers_dx12::RootSignatureGenerator rootSigGenerator;
-	return rootSigGenerator.Generate(mFallbackDevice.Get(), false);
-}
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void DXRNvTutorialApp::CreateRaytracingPipeline()
 {
@@ -354,59 +358,6 @@ void DXRNvTutorialApp::CreateRaytracingPipeline()
 	mFallbackStateObject = pipeline.FallbackGenerate(mGlobalRootSignature.Get());
 }
 
-void DXRNvTutorialApp::CreateRaytracingOutputBuffer()
-{
-	auto device = m_deviceResources->GetD3DDevice();
-	auto backbufferFormat = m_deviceResources->GetBackBufferFormat();
-
-	// Create the output resource. The dimensions and format should match the swap-chain.
-	auto uavDesc = CD3DX12_RESOURCE_DESC::Tex2D(backbufferFormat, m_width, m_height, 1, 1, 1, 0, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
-
-	auto defaultHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
-	ThrowIfFailed(device->CreateCommittedResource(
-		&defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &uavDesc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr, IID_PPV_ARGS(&mOutputResource)));
-	NAME_D3D12_OBJECT(mOutputResource);
-
-	D3D12_CPU_DESCRIPTOR_HANDLE uavDescriptorHandle;
-	UINT outputResourceUAVDescriptorHeapIndex = AllocateDescriptor(&uavDescriptorHandle, UINT_MAX);
-	D3D12_UNORDERED_ACCESS_VIEW_DESC UAVDesc = {};
-	UAVDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
-	device->CreateUnorderedAccessView(mOutputResource.Get(), nullptr, &UAVDesc, uavDescriptorHandle);
-	mOutputResourceUAVGpuDescriptor = CD3DX12_GPU_DESCRIPTOR_HANDLE(mDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), outputResourceUAVDescriptorHeapIndex, mDescriptorSize);
-}
-
-void DXRNvTutorialApp::InitShaderResourceHeap()
-{
-	auto device = m_deviceResources->GetD3DDevice();
-
-	// Get a handle to the heap memory on the CPU side, to be able to write the descriptors directly
-	D3D12_CPU_DESCRIPTOR_HANDLE srvHandle = mDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
-
-	if (false) {
-		// Create the UAV. Based on the root signature we created it is the first entry. The Create*View
-		// methods write the view information directly into srvHandle
-		D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
-		uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
-		device->CreateUnorderedAccessView(mOutputResource.Get(), nullptr, &uavDesc, srvHandle);
-
-		// Add the Top Level AS SRV right after the raytracing output buffer
-		srvHandle.ptr += mDescriptorSize;
-		mDescriptorsAllocated += 1;
-	}
-
-	if (false) {
-		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc;
-		srvDesc.Format = DXGI_FORMAT_UNKNOWN;
-		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE;
-		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-		srvDesc.RaytracingAccelerationStructure.Location = mTlas.mResult->GetGPUVirtualAddress();
-		// Write the acceleration structure view in the heap
-		device->CreateShaderResourceView(nullptr, &srvDesc, srvHandle);
-
-		mDescriptorsAllocated += 1;
-	}
-}
-
 void DXRNvTutorialApp::CreateShaderBindingTable()
 {
 	auto device = m_deviceResources->GetD3DDevice();
@@ -418,7 +369,7 @@ void DXRNvTutorialApp::CreateShaderBindingTable()
 	D3D12_GPU_DESCRIPTOR_HANDLE srvUavHeapHandle = mDescriptorHeap->GetGPUDescriptorHandleForHeapStart();
 	auto heapPointer = reinterpret_cast<UINT64*>(srvUavHeapHandle.ptr);
 
-	mShaderTableGenerator.AddRayGenerationProgram(L"RayGen", {heapPointer});
+	mShaderTableGenerator.AddRayGenerationProgram(L"RayGen", {});
 	mShaderTableGenerator.AddMissProgram(L"Miss", {});
 	mShaderTableGenerator.AddHitGroup(L"HitGroup", {});
 
@@ -436,38 +387,28 @@ void DXRNvTutorialApp::CreateShaderBindingTable()
 	mShaderTableGenerator.Generate(mShaderTable.Get(), mFallbackStateObject.Get());
 }
 
-void DXRNvTutorialApp::OnKeyDown(UINT8 key)
+void DXRNvTutorialApp::CreateRaytracingOutputBuffer()
 {
-    switch (key) {
-    case VK_SPACE:
-		mRaytracingEnabled ^= true;
-        break;
-    default:
-        break;
-    }
+	auto device = m_deviceResources->GetD3DDevice();
+	auto backbufferFormat = m_deviceResources->GetBackBufferFormat();
+
+	auto uavDesc = CD3DX12_RESOURCE_DESC::Tex2D(backbufferFormat, m_width, m_height, 1, 1, 1, 0, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+
+	auto defaultHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
+	ThrowIfFailed(device->CreateCommittedResource(
+		&defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &uavDesc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr, IID_PPV_ARGS(&mOutputResource)));
+	NAME_D3D12_OBJECT(mOutputResource);
+
+	D3D12_CPU_DESCRIPTOR_HANDLE uavDescriptorHandle;
+	UINT outputResourceUAVDescriptorHeapIndex = AllocateDescriptor(&uavDescriptorHandle, UINT_MAX);
+	D3D12_UNORDERED_ACCESS_VIEW_DESC UAVDesc = {};
+	UAVDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+	device->CreateUnorderedAccessView(mOutputResource.Get(), nullptr, &UAVDesc, uavDescriptorHandle);
+	mOutputResourceUAVGpuDescriptor = CD3DX12_GPU_DESCRIPTOR_HANDLE(
+		mDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), outputResourceUAVDescriptorHeapIndex, mDescriptorSize);
 }
 
-// Update frame-based values.
-void DXRNvTutorialApp::OnUpdate()
-{
-    mTimer.Tick();
-    CalculateFrameStats();
-    float elapsedTime = static_cast<float>(mTimer.GetElapsedSeconds());
-    auto frameIndex = m_deviceResources->GetCurrentFrameIndex();
-    auto prevFrameIndex = m_deviceResources->GetPreviousFrameIndex();
-}
-
-void DXRNvTutorialApp::UpdateForSizeChange(UINT width, UINT height)
-{
-    DXSample::UpdateForSizeChange(width, height);
-}
-
-void DXRNvTutorialApp::CreateWindowSizeDependentResources()
-{
-	CreateRaytracingOutputBuffer();
-
-    // UpdateCameraMatrices();
-}
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void DXRNvTutorialApp::ReleaseWindowSizeDependentResources()
 {
@@ -479,26 +420,23 @@ void DXRNvTutorialApp::ReleaseDeviceDependentResources()
     mFallbackDevice.Reset();
     mFallbackCommandList.Reset();
     mFallbackStateObject.Reset();
-    
-	mShaderTable.Reset();
 
+	mDescriptorHeap.Reset();
+	mVertexBuffer.Reset();
+	mBlas.Reset();
+    
 	mGlobalRootSignature.Reset();
 	mRayGenSignature.Reset();
 	mHitSignature.Reset();
 	mMissSignature.Reset();
-	mShadowSignature.Reset();
+
+	mShaderTable.Reset();
 }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void DXRNvTutorialApp::DoRaytracing()
 {
-    auto commandList = m_deviceResources->GetCommandList();
-    auto frameIndex = m_deviceResources->GetCurrentFrameIndex();
-
-	commandList->SetComputeRootSignature(mGlobalRootSignature.Get());
-
-	ID3D12DescriptorHeap *pDescriptorHeaps[] = { mDescriptorHeap.Get() };
-	mFallbackCommandList->SetDescriptorHeaps(ARRAYSIZE(pDescriptorHeaps), pDescriptorHeaps);
-
 	D3D12_FALLBACK_DISPATCH_RAYS_DESC desc = {};
 
 	// The ray generation shaders are always at the beginning of the SBT. 
@@ -529,6 +467,12 @@ void DXRNvTutorialApp::DoRaytracing()
 	desc.Width = GetWidth();
 	desc.Height = GetHeight();
 
+	ID3D12DescriptorHeap *pDescriptorHeaps[] = { mDescriptorHeap.Get() };
+	mFallbackCommandList->SetDescriptorHeaps(ARRAYSIZE(pDescriptorHeaps), pDescriptorHeaps);
+
+    auto commandList = m_deviceResources->GetCommandList();
+	commandList->SetComputeRootSignature(mGlobalRootSignature.Get());
+	commandList->SetComputeRootDescriptorTable(GlobalRootSignatureParams::OutputViewSlot, mOutputResourceUAVGpuDescriptor);
 	mFallbackCommandList->SetTopLevelAccelerationStructure(GlobalRootSignatureParams::AccelerationStructureSlot, mTlasWrappedPointer);
 
 	mFallbackCommandList->DispatchRays(mFallbackStateObject.Get(), &desc);
@@ -551,6 +495,17 @@ void DXRNvTutorialApp::CopyRaytracingOutputToBackbuffer()
 	postCopyBarriers[1] = CD3DX12_RESOURCE_BARRIER::Transition(mOutputResource.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
 	commandList->ResourceBarrier(ARRAYSIZE(postCopyBarriers), postCopyBarriers);
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void DXRNvTutorialApp::OnUpdate()
+{
+	mTimer.Tick();
+	CalculateFrameStats();
+	float elapsedTime = static_cast<float>(mTimer.GetElapsedSeconds());
+	auto frameIndex = m_deviceResources->GetCurrentFrameIndex();
+	auto prevFrameIndex = m_deviceResources->GetPreviousFrameIndex();
 }
 
 void DXRNvTutorialApp::OnRender()
@@ -577,6 +532,17 @@ void DXRNvTutorialApp::OnRender()
 	}
 }
 
+void DXRNvTutorialApp::OnKeyDown(UINT8 key)
+{
+	switch (key) {
+	case VK_SPACE:
+		mRaytracingEnabled ^= true;
+		break;
+	default:
+		break;
+	}
+}
+
 void DXRNvTutorialApp::OnDestroy()
 {
     m_deviceResources->WaitForGpu();
@@ -595,6 +561,20 @@ void DXRNvTutorialApp::OnDeviceRestored()
     CreateWindowSizeDependentResources();
 }
 
+void DXRNvTutorialApp::OnSizeChanged(UINT width, UINT height, bool minimized)
+{
+    if (!m_deviceResources->WindowSizeChanged(width, height, minimized)) {
+        return;
+    }
+
+    UpdateForSizeChange(width, height);
+
+    ReleaseWindowSizeDependentResources();
+    CreateWindowSizeDependentResources();
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 void DXRNvTutorialApp::CalculateFrameStats()
 {
     static int frameCnt = 0;
@@ -602,7 +582,6 @@ void DXRNvTutorialApp::CalculateFrameStats()
     double totalTime = mTimer.GetTotalSeconds();
     frameCnt++;
 
-    // Compute averages over one second period.
     if ((totalTime - elapsedTime) >= 1.0f) {
         float diff = static_cast<float>(totalTime - elapsedTime);
         float fps = static_cast<float>(frameCnt) / diff; // Normalize to an exact second.
@@ -626,16 +605,14 @@ void DXRNvTutorialApp::CalculateFrameStats()
     }
 }
 
-void DXRNvTutorialApp::OnSizeChanged(UINT width, UINT height, bool minimized)
+void DXRNvTutorialApp::SerializeAndCreateRaytracingRootSignature(D3D12_ROOT_SIGNATURE_DESC& desc, ComPtr<ID3D12RootSignature>* rootSig)
 {
-    if (!m_deviceResources->WindowSizeChanged(width, height, minimized)) {
-        return;
-    }
+	auto device = m_deviceResources->GetD3DDevice();
+	ComPtr<ID3DBlob> blob;
+	ComPtr<ID3DBlob> error;
 
-    UpdateForSizeChange(width, height);
-
-    ReleaseWindowSizeDependentResources();
-    CreateWindowSizeDependentResources();
+	ThrowIfFailed(mFallbackDevice->D3D12SerializeRootSignature(&desc, D3D_ROOT_SIGNATURE_VERSION_1, &blob, &error), error ? static_cast<wchar_t*>(error->GetBufferPointer()) : nullptr);
+	ThrowIfFailed(mFallbackDevice->CreateRootSignature(1, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&(*rootSig))));
 }
 
 // Create a wrapped pointer for the Fallback Layer path.
@@ -670,4 +647,22 @@ UINT DXRNvTutorialApp::AllocateDescriptor(D3D12_CPU_DESCRIPTOR_HANDLE* cpuDescri
     }
     *cpuDescriptor = CD3DX12_CPU_DESCRIPTOR_HANDLE(descriptorHeapCpuBase, descriptorIndexToUse, mDescriptorSize);
     return descriptorIndexToUse;
+}
+
+void DXRNvTutorialApp::EnableDXRExperimentalFeatures(IDXGIAdapter1* adapter)
+{
+	// DXR is an experimental feature and needs to be enabled before creating a D3D12 device.
+	mUseDXRDriver = EnableRaytracing(adapter);
+
+	if (!mUseDXRDriver) {
+		OutputDebugString(
+			L"Could not enable raytracing driver (D3D12EnableExperimentalFeatures() failed).\n" \
+			L"Possible reasons:\n" \
+			L"  1) your OS is not in developer mode.\n" \
+			L"  2) your GPU driver doesn't match the D3D12 runtime loaded by the app (d3d12.dll and friends).\n" \
+			L"  3) your D3D12 runtime doesn't match the D3D12 headers used by your app (in particular, the GUID passed to D3D12EnableExperimentalFeatures).\n\n");
+
+		OutputDebugString(L"Enabling compute based fallback raytracing support.\n");
+		ThrowIfFalse(EnableComputeRaytracingFallback(adapter), L"Could not enable compute based fallback raytracing support (D3D12EnableExperimentalFeatures() failed).\n");
+	}
 }
