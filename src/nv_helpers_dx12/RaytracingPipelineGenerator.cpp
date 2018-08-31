@@ -549,7 +549,7 @@ void RayTracingPipelineGenerator::FallbackCreateDummyRootSignatures()
   if (FAILED(hr))
   {
     throw std::logic_error("Could not create the local root signature");
-  }	
+  }
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -680,7 +680,7 @@ void RayTracingPipelineGenerator::Library::Construct(const void *shaderBytecode,
   m_libDesc.DXILLibrary.BytecodeLength = bytecodeSize;
   m_libDesc.DXILLibrary.pShaderBytecode = shaderBytecode;
   m_libDesc.NumExports = static_cast<UINT>(m_exportedSymbols.size());
-  m_libDesc.pExports = m_exports.data();	
+  m_libDesc.pExports = m_exports.data();
 }
 
 //--------------------------------------------------------------------------------------------------

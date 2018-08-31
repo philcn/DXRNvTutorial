@@ -312,7 +312,7 @@ void TopLevelASGenerator::Generate(
 // Fallback layer implementation
 void TopLevelASGenerator::Generate(
     ID3D12GraphicsCommandList* commandList, // Command list on which the build will be enqueued
-	ID3D12RaytracingFallbackCommandList*
+    ID3D12RaytracingFallbackCommandList*
         rtCmdList,                     // Same command list, casted into a raytracing list. This
                                        // will not be needed anymore with Windows 10 RS5.
     ID3D12Resource* scratchBuffer,     // Scratch buffer used by the builder to
@@ -330,7 +330,7 @@ void TopLevelASGenerator::Generate(
 )
 {
   // Copy the descriptors in the target descriptor buffer
-	D3D12_RAYTRACING_FALLBACK_INSTANCE_DESC* instanceDescs;
+  D3D12_RAYTRACING_FALLBACK_INSTANCE_DESC* instanceDescs;
   descriptorsBuffer->Map(0, nullptr, reinterpret_cast<void**>(&instanceDescs));
   if (!instanceDescs)
   {

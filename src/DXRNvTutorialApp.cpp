@@ -241,9 +241,7 @@ AccelerationStructureBuffers DXRNvTutorialApp::CreateTopLevelAS(const std::vecto
 
 void DXRNvTutorialApp::CreateAccelerationStructures()
 {
-    auto device = m_deviceResources->GetD3DDevice();
     auto commandList = m_deviceResources->GetCommandList();
-    auto commandQueue = m_deviceResources->GetCommandQueue();
     auto commandAllocator = m_deviceResources->GetCommandAllocator();
 
     // Reset the command list for the acceleration structure construction.

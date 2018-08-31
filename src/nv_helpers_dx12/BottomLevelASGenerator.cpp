@@ -161,47 +161,47 @@ void BottomLevelASGenerator::ComputeASBufferSizes(
 
 // Fallback layer implementation
 void BottomLevelASGenerator::ComputeASBufferSizes(
-	ID3D12RaytracingFallbackDevice* device,  // Device on which the build will be performed
-	bool allowUpdate,                        // If true, the resulting acceleration structure will
-											 // allow iterative updates
-	UINT64* scratchSizeInBytes,              // Required scratch memory on the GPU to build
-											 // the acceleration structure
-	UINT64* resultSizeInBytes                // Required GPU memory to store the acceleration
-											 // structure
+    ID3D12RaytracingFallbackDevice* device,  // Device on which the build will be performed
+    bool allowUpdate,                        // If true, the resulting acceleration structure will
+                                             // allow iterative updates
+    UINT64* scratchSizeInBytes,              // Required scratch memory on the GPU to build
+                                             // the acceleration structure
+    UINT64* resultSizeInBytes                // Required GPU memory to store the acceleration
+                                             // structure
 )
 {
-	// The generated AS can support iterative updates. This may change the final
-	// size of the AS as well as the temporary memory requirements, and hence has
-	// to be set before the actual build
-	m_flags = allowUpdate ? D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE
-		: D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE;
+  // The generated AS can support iterative updates. This may change the final
+  // size of the AS as well as the temporary memory requirements, and hence has
+  // to be set before the actual build
+  m_flags = allowUpdate ? D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE
+                        : D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE;
 
-	// Describe the work being requested, in this case the construction of a
-	// (possibly dynamic) bottom-level hierarchy, with the given vertex buffers
-	D3D12_GET_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO_DESC prebuildDesc;
-	prebuildDesc.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL;
-	prebuildDesc.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
-	prebuildDesc.NumDescs = static_cast<UINT>(m_vertexBuffers.size());
-	prebuildDesc.pGeometryDescs = m_vertexBuffers.data();
-	prebuildDesc.Flags = m_flags;
+  // Describe the work being requested, in this case the construction of a
+  // (possibly dynamic) bottom-level hierarchy, with the given vertex buffers
+  D3D12_GET_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO_DESC prebuildDesc;
+  prebuildDesc.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL;
+  prebuildDesc.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
+  prebuildDesc.NumDescs = static_cast<UINT>(m_vertexBuffers.size());
+  prebuildDesc.pGeometryDescs = m_vertexBuffers.data();
+  prebuildDesc.Flags = m_flags;
 
-	// This structure is used to hold the sizes of the required scratch memory and resulting AS
-	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO info = {};
+  // This structure is used to hold the sizes of the required scratch memory and resulting AS
+  D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO info = {};
 
-	// Building the acceleration structure (AS) requires some scratch space, as well as space to store
-	// the resulting structure This function computes a conservative estimate of the memory
-	// requirements for both, based on the geometry size.
-	device->GetRaytracingAccelerationStructurePrebuildInfo(&prebuildDesc, &info);
+  // Building the acceleration structure (AS) requires some scratch space, as well as space to store
+  // the resulting structure This function computes a conservative estimate of the memory
+  // requirements for both, based on the geometry size.
+  device->GetRaytracingAccelerationStructurePrebuildInfo(&prebuildDesc, &info);
 
-	// Buffer sizes need to be 256-byte-aligned
-	*scratchSizeInBytes =
-		ROUND_UP(info.ScratchDataSizeInBytes, D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT);
-	*resultSizeInBytes =
-		ROUND_UP(info.ResultDataMaxSizeInBytes, D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT);
+  // Buffer sizes need to be 256-byte-aligned
+  *scratchSizeInBytes =
+      ROUND_UP(info.ScratchDataSizeInBytes, D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT);
+  *resultSizeInBytes =
+      ROUND_UP(info.ResultDataMaxSizeInBytes, D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT);
 
-	// Store the memory requirements for use during build
-	m_scratchSizeInBytes = *scratchSizeInBytes;
-	m_resultSizeInBytes = *resultSizeInBytes;
+  // Store the memory requirements for use during build
+  m_scratchSizeInBytes = *scratchSizeInBytes;
+  m_resultSizeInBytes = *resultSizeInBytes;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -278,69 +278,69 @@ void BottomLevelASGenerator::Generate(
 
 // Fallback layer implementation
 void BottomLevelASGenerator::Generate(
-	ID3D12GraphicsCommandList* commandList, // Command list on which the build will be enqueued
-	ID3D12RaytracingFallbackCommandList*
-	rtCmdList,                 // Same command list, casted into a raytracing list. This
-							   // will not be needed anymore with Windows 10 RS5.
-	ID3D12Resource* scratchBuffer, // Scratch buffer used by the builder to
-								   // store temporary data
-	ID3D12Resource* resultBuffer,  // Result buffer storing the acceleration structure
-	bool updateOnly,               // If true, simply refit the existing
-								   // acceleration structure
-	ID3D12Resource* previousResult // Optional previous acceleration
-								   // structure, used if an iterative update
-								   // is requested
+    ID3D12GraphicsCommandList* commandList, // Command list on which the build will be enqueued
+    ID3D12RaytracingFallbackCommandList*
+    rtCmdList,                 // Same command list, casted into a raytracing list. This
+                               // will not be needed anymore with Windows 10 RS5.
+    ID3D12Resource* scratchBuffer, // Scratch buffer used by the builder to
+                                   // store temporary data
+    ID3D12Resource* resultBuffer,  // Result buffer storing the acceleration structure
+    bool updateOnly,               // If true, simply refit the existing
+                                   // acceleration structure
+    ID3D12Resource* previousResult // Optional previous acceleration
+                                   // structure, used if an iterative update
+                                   // is requested
 )
 {
 
-	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS flags = m_flags;
-	// The stored flags represent whether the AS has been built for updates or not. If yes and an
-	// update is requested, the builder is told to only update the AS instead of fully rebuilding it
-	if (flags == D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE && updateOnly)
-	{
-		flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE;
-	}
+  D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS flags = m_flags;
+  // The stored flags represent whether the AS has been built for updates or not. If yes and an
+  // update is requested, the builder is told to only update the AS instead of fully rebuilding it
+  if (flags == D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE && updateOnly)
+  {
+    flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE;
+  }
 
-	// Sanity checks
-	if (m_flags != D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE && updateOnly)
-	{
-		throw std::logic_error("Cannot update a bottom-level AS not originally built for updates");
-	}
-	if (updateOnly && previousResult == nullptr)
-	{
-		throw std::logic_error("Bottom-level hierarchy update requires the previous hierarchy");
-	}
+  // Sanity checks
+  if (m_flags != D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE && updateOnly)
+  {
+    throw std::logic_error("Cannot update a bottom-level AS not originally built for updates");
+  }
+  if (updateOnly && previousResult == nullptr)
+  {
+    throw std::logic_error("Bottom-level hierarchy update requires the previous hierarchy");
+  }
 
-	if (m_resultSizeInBytes == 0 || m_scratchSizeInBytes == 0)
-	{
-		throw std::logic_error("Invalid scratch and result buffer sizes - ComputeASBufferSizes needs "
-			"to be called before Build");
-	}
-	// Create a descriptor of the requested builder work, to generate a
-	// bottom-level AS from the input parameters
-	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {};
-	buildDesc.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL;
-	buildDesc.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
-	buildDesc.NumDescs = static_cast<UINT>(m_vertexBuffers.size());
-	buildDesc.pGeometryDescs = m_vertexBuffers.data();
-	buildDesc.DestAccelerationStructureData = {resultBuffer->GetGPUVirtualAddress(),
-		m_resultSizeInBytes};
-	buildDesc.ScratchAccelerationStructureData = {scratchBuffer->GetGPUVirtualAddress(),
-		m_scratchSizeInBytes};
-	buildDesc.SourceAccelerationStructureData =
-		previousResult ? previousResult->GetGPUVirtualAddress() : 0;
-	buildDesc.Flags = flags;
+  if (m_resultSizeInBytes == 0 || m_scratchSizeInBytes == 0)
+  {
+    throw std::logic_error("Invalid scratch and result buffer sizes - ComputeASBufferSizes needs "
+                           "to be called before Build");
+  }
+  // Create a descriptor of the requested builder work, to generate a
+  // bottom-level AS from the input parameters
+  D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {};
+  buildDesc.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL;
+  buildDesc.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
+  buildDesc.NumDescs = static_cast<UINT>(m_vertexBuffers.size());
+  buildDesc.pGeometryDescs = m_vertexBuffers.data();
+  buildDesc.DestAccelerationStructureData = {resultBuffer->GetGPUVirtualAddress(),
+                                             m_resultSizeInBytes};
+  buildDesc.ScratchAccelerationStructureData = {scratchBuffer->GetGPUVirtualAddress(),
+                                                m_scratchSizeInBytes};
+  buildDesc.SourceAccelerationStructureData =
+      previousResult ? previousResult->GetGPUVirtualAddress() : 0;
+  buildDesc.Flags = flags;
 
-	// Build the AS
-	rtCmdList->BuildRaytracingAccelerationStructure(&buildDesc);
+  // Build the AS
+  rtCmdList->BuildRaytracingAccelerationStructure(&buildDesc);
 
-	// Wait for the builder to complete by setting a barrier on the resulting buffer. This is
-	// particularly important as the construction of the top-level hierarchy may be called right
-	// afterwards, before executing the command list.
-	D3D12_RESOURCE_BARRIER uavBarrier;
-	uavBarrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
-	uavBarrier.UAV.pResource = resultBuffer;
-	uavBarrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-	commandList->ResourceBarrier(1, &uavBarrier);
+  // Wait for the builder to complete by setting a barrier on the resulting buffer. This is
+  // particularly important as the construction of the top-level hierarchy may be called right
+  // afterwards, before executing the command list.
+  D3D12_RESOURCE_BARRIER uavBarrier;
+  uavBarrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+  uavBarrier.UAV.pResource = resultBuffer;
+  uavBarrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+  commandList->ResourceBarrier(1, &uavBarrier);
 }
 } // namespace nv_helpers_dx12

@@ -32,14 +32,14 @@ typedef UINT16 Index;
 // D3D12_RAYTRACING_SHADER_CONFIG pipeline subobjet.
 struct HitInfo
 {
-	XMFLOAT4 colorAndDistance;
+    XMFLOAT4 colorAndDistance;
 };
 
 // Attributes output by the raytracing when hitting a surface,
 // here the barycentric coordinates
 struct Attributes
 {
-	XMFLOAT2 bary;
+    XMFLOAT2 bary;
 };
 
 struct Vertex

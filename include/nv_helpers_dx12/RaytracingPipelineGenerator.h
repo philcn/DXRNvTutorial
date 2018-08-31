@@ -137,11 +137,11 @@ private:
   {
     Library(IDxcBlob* dxil, const std::vector<std::wstring>& exportedSymbols);
 
-	Library(const void *shaderBytecode, UINT bytecodeSize, const std::vector<std::wstring>& exportedSymbols);
+    Library(const void *shaderBytecode, UINT bytecodeSize, const std::vector<std::wstring>& exportedSymbols);
 
     Library(const Library& source);
 
-	void Construct(const void *shaderBytecode, UINT bytecodeSize);
+    void Construct(const void *shaderBytecode, UINT bytecodeSize);
 
     IDxcBlob* m_dxil;
     const std::vector<std::wstring> m_exportedSymbols;
