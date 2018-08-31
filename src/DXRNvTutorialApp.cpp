@@ -152,20 +152,7 @@ void DXRNvTutorialApp::CreateGeometries()
     // recommended. Every time the GPU needs it, the upload heap will be marshalled 
     // over. Please read up on Default Heap usage. An upload heap is used here for 
     // code simplicity and because there are very few verts to actually transfer.
-    ThrowIfFailed(device->CreateCommittedResource(
-        &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
-        D3D12_HEAP_FLAG_NONE,
-        &CD3DX12_RESOURCE_DESC::Buffer(vertexBufferSize),
-        D3D12_RESOURCE_STATE_GENERIC_READ,
-        nullptr,
-        IID_PPV_ARGS(&mVertexBuffer)));
-
-    // Copy the triangle data to the vertex buffer.
-    UINT8* pVertexDataBegin;
-    CD3DX12_RANGE readRange(0, 0);        // We do not intend to read from this resource on the CPU.
-    ThrowIfFailed(mVertexBuffer->Map(0, &readRange, reinterpret_cast<void**>(&pVertexDataBegin)));
-    memcpy(pVertexDataBegin, triangleVertices, sizeof(triangleVertices));
-    mVertexBuffer->Unmap(0, nullptr);
+    AllocateUploadBuffer(device, triangleVertices, sizeof(triangleVertices), &mVertexBuffer);
 }
 
 AccelerationStructureBuffers DXRNvTutorialApp::CreateBottomLevelAS(std::vector<std::pair<ComPtr<ID3D12Resource>, uint32_t>> vertexBuffers)
@@ -392,12 +379,7 @@ void DXRNvTutorialApp::CreateRaytracingOutputBuffer()
     auto device = m_deviceResources->GetD3DDevice();
     auto backbufferFormat = m_deviceResources->GetBackBufferFormat();
 
-    auto uavDesc = CD3DX12_RESOURCE_DESC::Tex2D(backbufferFormat, m_width, m_height, 1, 1, 1, 0, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
-
-    auto defaultHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
-    ThrowIfFailed(device->CreateCommittedResource(
-        &defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &uavDesc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr, IID_PPV_ARGS(&mOutputResource)));
-    NAME_D3D12_OBJECT(mOutputResource);
+    AllocateUAVTexture(device, backbufferFormat, m_width, m_height, &mOutputResource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
     D3D12_CPU_DESCRIPTOR_HANDLE uavDescriptorHandle;
     UINT outputResourceUAVDescriptorHeapIndex = AllocateDescriptor(&uavDescriptorHandle, UINT_MAX);
