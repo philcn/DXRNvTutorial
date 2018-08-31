@@ -275,13 +275,15 @@ void DXRNvTutorialApp::CreateAccelerationStructures()
 
 void DXRNvTutorialApp::CreateGlobalRootSignature()
 {
-#if 0
+#if 1
     nv_helpers_dx12::RootSignatureGenerator rootSigGenerator;
+    // slot 0, GlobalRootSignatureParams::AccelerationStructureSlot
+    rootSigGenerator.AddRootParameter(D3D12_ROOT_PARAMETER_TYPE_SRV, 0);
+    // slot 1, GlobalRootSignatureParams::OutputViewSlot
     rootSigGenerator.AddHeapRangesParameter({
-        {0 /*u0*/, 1 /*1 descriptor*/, 0 /*space 0*/, D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0 /*heap slot for this UAV*/}, // output buffer
-        {0 /*t0*/, 1, 0, D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1} // Tlas
+        {0 /* u0 */, 1 /* 1 descriptor */, 0 /* space 0 */, D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0 /* offset to heap root argument */}
     });
-    return rootSigGenerator.Generate(mFallbackDevice.Get(), true);
+    mGlobalRootSignature = rootSigGenerator.Generate(mFallbackDevice.Get(), false /* local root signature */);
 #else
     CD3DX12_DESCRIPTOR_RANGE ranges[1]; // Perfomance TIP: Order from most frequent to least frequent.
     ranges[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0); // 1 output texture
