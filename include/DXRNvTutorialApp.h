@@ -12,6 +12,7 @@
 #pragma once
 
 #include "DXSample.h"
+#include "DirectXRaytracingHelper.h"
 #include "StepTimer.h"
 #include "RaytracingHlslCompat.h"
 
@@ -21,13 +22,6 @@
 #include "nv_helpers_dx12/ShaderBindingTableGenerator.h"
 
 #include <vector>
-
-struct AccelerationStructure
-{
-    ComPtr<ID3D12Resource> mScratch;
-    ComPtr<ID3D12Resource> mResult;
-    ComPtr<ID3D12Resource> mInstanceDesc;
-};
 
 class DXRNvTutorialApp : public DXSample
 {
@@ -67,8 +61,8 @@ private:
     std::vector<std::pair<ComPtr<ID3D12Resource>, DirectX::XMMATRIX>> mInstances;
 
     // Acceleration structures
-    ComPtr<ID3D12Resource> mBlas;
-    AccelerationStructure mTlas;
+    ComPtr<ID3D12Resource> mBlasBuffer;
+    ComPtr<ID3D12Resource> mTlasBuffer;
     WRAPPED_GPU_POINTER mTlasWrappedPointer;
 
     // Pipeline
@@ -95,8 +89,8 @@ private:
     void CreateDescriptorHeap();
     void CreateGeometries();
 
-    AccelerationStructure CreateBottomLevelAS(std::vector<std::pair<ComPtr<ID3D12Resource>, uint32_t>> vertexBuffers);
-    AccelerationStructure CreateTopLevelAS(const std::vector<std::pair<ComPtr<ID3D12Resource>, DirectX::XMMATRIX>> &instances, UINT &outResultSizeBytes);
+    AccelerationStructureBuffers CreateBottomLevelAS(std::vector<std::pair<ComPtr<ID3D12Resource>, uint32_t>> vertexBuffers);
+    AccelerationStructureBuffers CreateTopLevelAS(const std::vector<std::pair<ComPtr<ID3D12Resource>, DirectX::XMMATRIX>> &instances);
     void CreateAccelerationStructures();
 
     void CreateGlobalRootSignature();

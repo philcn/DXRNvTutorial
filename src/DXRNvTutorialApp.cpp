@@ -168,7 +168,7 @@ void DXRNvTutorialApp::CreateGeometries()
     mVertexBuffer->Unmap(0, nullptr);
 }
 
-AccelerationStructure DXRNvTutorialApp::CreateBottomLevelAS(std::vector<std::pair<ComPtr<ID3D12Resource>, uint32_t>> vertexBuffers)
+AccelerationStructureBuffers DXRNvTutorialApp::CreateBottomLevelAS(std::vector<std::pair<ComPtr<ID3D12Resource>, uint32_t>> vertexBuffers)
 {
     nv_helpers_dx12::BottomLevelASGenerator blasGenerator;
 
@@ -181,24 +181,24 @@ AccelerationStructure DXRNvTutorialApp::CreateBottomLevelAS(std::vector<std::pai
     blasGenerator.ComputeASBufferSizes(mFallbackDevice.Get(), false, &scratchSizeInBytes, &resultSizeInBytes);
 
     auto device = m_deviceResources->GetD3DDevice();
-    AccelerationStructure buffers;
+    AccelerationStructureBuffers buffers;
 
-    buffers.mScratch = nv_helpers_dx12::CreateBuffer(
+    buffers.scratch = nv_helpers_dx12::CreateBuffer(
         device, scratchSizeInBytes, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, 
         D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nv_helpers_dx12::kDefaultHeapProps);
 
     D3D12_RESOURCE_STATES initialResourceState = mFallbackDevice->GetAccelerationStructureResourceState();
-    buffers.mResult = nv_helpers_dx12::CreateBuffer(
+    buffers.accelerationStructure = nv_helpers_dx12::CreateBuffer(
         device, resultSizeInBytes, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, 
         initialResourceState, nv_helpers_dx12::kDefaultHeapProps);
 
     auto commandList = m_deviceResources->GetCommandList();
-    blasGenerator.Generate(commandList, mFallbackCommandList.Get(), buffers.mScratch.Get(), buffers.mResult.Get());
+    blasGenerator.Generate(commandList, mFallbackCommandList.Get(), buffers.scratch.Get(), buffers.accelerationStructure.Get());
 
     return buffers;
 }
 
-AccelerationStructure DXRNvTutorialApp::CreateTopLevelAS(const std::vector<std::pair<ComPtr<ID3D12Resource>, DirectX::XMMATRIX>> &instances, UINT &outResultSizeBytes)
+AccelerationStructureBuffers DXRNvTutorialApp::CreateTopLevelAS(const std::vector<std::pair<ComPtr<ID3D12Resource>, DirectX::XMMATRIX>> &instances)
 {
     nv_helpers_dx12::TopLevelASGenerator tlasGenerator;
 
@@ -212,27 +212,26 @@ AccelerationStructure DXRNvTutorialApp::CreateTopLevelAS(const std::vector<std::
     tlasGenerator.ComputeASBufferSizes(mFallbackDevice.Get(), true, &scratchSizeInBytes, &resultSizeInBytes, &instanceDescsSize);
 
     auto device = m_deviceResources->GetD3DDevice();
-    AccelerationStructure buffers;
+    AccelerationStructureBuffers buffers;
+    buffers.ResultDataMaxSizeInBytes = resultSizeInBytes;
     
     // Allocate on default heap since the build is done on GPU
-    buffers.mScratch = nv_helpers_dx12::CreateBuffer(
+    buffers.scratch = nv_helpers_dx12::CreateBuffer(
         device, scratchSizeInBytes, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, 
         D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nv_helpers_dx12::kDefaultHeapProps);
 
     D3D12_RESOURCE_STATES initialResourceState = mFallbackDevice->GetAccelerationStructureResourceState();
-    buffers.mResult = nv_helpers_dx12::CreateBuffer(
+    buffers.accelerationStructure = nv_helpers_dx12::CreateBuffer(
         device, resultSizeInBytes, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, 
         initialResourceState, nv_helpers_dx12::kDefaultHeapProps);
     
-    buffers.mInstanceDesc = nv_helpers_dx12::CreateBuffer(
+    buffers.instanceDesc = nv_helpers_dx12::CreateBuffer(
         device, instanceDescsSize, D3D12_RESOURCE_FLAG_NONE, 
         D3D12_RESOURCE_STATE_GENERIC_READ, nv_helpers_dx12::kUploadHeapProps); 
 
     auto commandList = m_deviceResources->GetCommandList();
-    tlasGenerator.Generate(commandList, mFallbackCommandList.Get(), buffers.mScratch.Get(), buffers.mResult.Get(), buffers.mInstanceDesc.Get(), 
+    tlasGenerator.Generate(commandList, mFallbackCommandList.Get(), buffers.scratch.Get(), buffers.accelerationStructure.Get(), buffers.instanceDesc.Get(), 
         device, mFallbackDevice.Get(), mDescriptorHeap.Get(), mDescriptorsAllocated, mDescriptorSize);
-
-    outResultSizeBytes = resultSizeInBytes;
 
     return buffers;
 }
@@ -254,21 +253,19 @@ void DXRNvTutorialApp::CreateAccelerationStructures()
     std::vector<std::pair<ComPtr<ID3D12Resource>, uint32_t>> vertexBuffers;
     vertexBuffers.emplace_back(std::make_pair(mVertexBuffer, 3));
 
-    AccelerationStructure blas = CreateBottomLevelAS(vertexBuffers);
+    AccelerationStructureBuffers blas = CreateBottomLevelAS(vertexBuffers);
 
-    mInstances.emplace_back(std::make_pair(blas.mResult, XMMatrixIdentity()));
+    mInstances.emplace_back(std::make_pair(blas.accelerationStructure, XMMatrixIdentity()));
 
-    UINT resultSizeInBytes = 0;
-    AccelerationStructure tlas = CreateTopLevelAS(mInstances, resultSizeInBytes);
-    mTlasWrappedPointer = CreateFallbackWrappedPointer(tlas.mResult.Get(), resultSizeInBytes / sizeof(UINT32));
+    AccelerationStructureBuffers tlas = CreateTopLevelAS(mInstances);
+    mTlasWrappedPointer = CreateFallbackWrappedPointer(tlas.accelerationStructure.Get(), tlas.ResultDataMaxSizeInBytes / sizeof(UINT32));
 
     m_deviceResources->ExecuteCommandList();
     m_deviceResources->WaitForGpu();
 
     // Retain the bottom level AS result buffer and release the rest of the buffers
-    mBlas = blas.mResult;
-
-    mTlas = tlas;
+    mBlasBuffer = blas.accelerationStructure;
+    mTlasBuffer = tlas.accelerationStructure;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -425,7 +422,8 @@ void DXRNvTutorialApp::ReleaseDeviceDependentResources()
 
     mDescriptorHeap.Reset();
     mVertexBuffer.Reset();
-    mBlas.Reset();
+    mBlasBuffer.Reset();
+    mTlasBuffer.Reset();
     
     mGlobalRootSignature.Reset();
     mRayGenSignature.Reset();
