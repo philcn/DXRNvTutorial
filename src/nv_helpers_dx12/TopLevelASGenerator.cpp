@@ -46,7 +46,6 @@ buffer needs to be kept until the command list execution is finished.
 */
 
 #include "TopLevelASGenerator.h"
-#include "DXRFallbackLayerUtils.h"
 
 // Helper to compute aligned buffer sizes
 #ifndef ROUND_UP
@@ -142,60 +141,60 @@ void TopLevelASGenerator::ComputeASBufferSizes(
 
 // Fallback layer implementation
 void TopLevelASGenerator::ComputeASBufferSizes(
-	ID3D12RaytracingFallbackDevice* device, // Device on which the build will be performed
-	bool allowUpdate,                        // If true, the resulting acceleration structure will
-											 // allow iterative updates
-	UINT64* scratchSizeInBytes,              // Required scratch memory on the GPU to build
-											 // the acceleration structure
-	UINT64* resultSizeInBytes,               // Required GPU memory to store the acceleration
-											 // structure
-	UINT64* descriptorsSizeInBytes           // Required GPU memory to store instance
-											 // descriptors, containing the matrices,
-											 // indices etc.
+    ID3D12RaytracingFallbackDevice* device, // Device on which the build will be performed
+    bool allowUpdate,                        // If true, the resulting acceleration structure will
+                                             // allow iterative updates
+    UINT64* scratchSizeInBytes,              // Required scratch memory on the GPU to build
+                                             // the acceleration structure
+    UINT64* resultSizeInBytes,               // Required GPU memory to store the acceleration
+                                             // structure
+    UINT64* descriptorsSizeInBytes           // Required GPU memory to store instance
+                                             // descriptors, containing the matrices,
+                                             // indices etc.
 )
 {
-	// The generated AS can support iterative updates. This may change the final
-	// size of the AS as well as the temporary memory requirements, and hence has
-	// to be set before the actual build
-	m_flags = allowUpdate ? D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE
-		: D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE;
+  // The generated AS can support iterative updates. This may change the final
+  // size of the AS as well as the temporary memory requirements, and hence has
+  // to be set before the actual build
+  m_flags = allowUpdate ? D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE
+                        : D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE;
 
-	// Describe the work being requested, in this case the construction of a
-	// (possibly dynamic) top-level hierarchy, with the given instance descriptors
-	D3D12_GET_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO_DESC
-		prebuildDesc = {};
-	prebuildDesc.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;
-	prebuildDesc.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
-	prebuildDesc.NumDescs = static_cast<UINT>(m_instances.size());
-	prebuildDesc.Flags = m_flags;
+  // Describe the work being requested, in this case the construction of a
+  // (possibly dynamic) top-level hierarchy, with the given instance descriptors
+  D3D12_GET_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO_DESC
+  prebuildDesc = {};
+  prebuildDesc.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;
+  prebuildDesc.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
+  prebuildDesc.NumDescs = static_cast<UINT>(m_instances.size());
+  prebuildDesc.Flags = m_flags;
 
-	// This structure is used to hold the sizes of the required scratch memory and
-	// resulting AS
-	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO info = {};
+  // This structure is used to hold the sizes of the required scratch memory and
+  // resulting AS
+  D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO info = {};
 
-	// Building the acceleration structure (AS) requires some scratch space, as
-	// well as space to store the resulting structure This function computes a
-	// conservative estimate of the memory requirements for both, based on the
-	// number of bottom-level instances.
-	device->GetRaytracingAccelerationStructurePrebuildInfo(&prebuildDesc, &info);
+  // Building the acceleration structure (AS) requires some scratch space, as
+  // well as space to store the resulting structure This function computes a
+  // conservative estimate of the memory requirements for both, based on the
+  // number of bottom-level instances.
+  device->GetRaytracingAccelerationStructurePrebuildInfo(&prebuildDesc, &info);
 
-	// Buffer sizes need to be 256-byte-aligned
-	info.ResultDataMaxSizeInBytes =
-		ROUND_UP(info.ResultDataMaxSizeInBytes, D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT);
-	info.ScratchDataSizeInBytes =
-		ROUND_UP(info.ScratchDataSizeInBytes, D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT);
+  // Buffer sizes need to be 256-byte-aligned
+  info.ResultDataMaxSizeInBytes =
+      ROUND_UP(info.ResultDataMaxSizeInBytes, D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT);
+  info.ScratchDataSizeInBytes =
+      ROUND_UP(info.ScratchDataSizeInBytes, D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT);
 
-	m_resultSizeInBytes = info.ResultDataMaxSizeInBytes;
-	m_scratchSizeInBytes = info.ScratchDataSizeInBytes;
-	// The instance descriptors are stored as-is in GPU memory, so we can deduce
-	// the required size from the instance count
-	m_instanceDescsSizeInBytes =
-		ROUND_UP(sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * static_cast<UINT64>(m_instances.size()),
-			D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT);
+  m_resultSizeInBytes = info.ResultDataMaxSizeInBytes;
+  m_scratchSizeInBytes = info.ScratchDataSizeInBytes;
+  // The instance descriptors are stored as-is in GPU memory, so we can deduce
+  // the required size from the instance count
+  m_instanceDescsSizeInBytes =
+      ROUND_UP(sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * static_cast<UINT64>(m_instances.size()),
+               D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT);
 
-	*scratchSizeInBytes = m_scratchSizeInBytes;
-	*resultSizeInBytes = m_resultSizeInBytes;
-	*descriptorsSizeInBytes = m_instanceDescsSizeInBytes;
+  *scratchSizeInBytes = m_scratchSizeInBytes;
+  *resultSizeInBytes = m_resultSizeInBytes;
+  *descriptorsSizeInBytes = m_instanceDescsSizeInBytes;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -321,14 +320,8 @@ void TopLevelASGenerator::Generate(
     ID3D12Resource* resultBuffer,      // Result buffer storing the acceleration structure
     ID3D12Resource* descriptorsBuffer, // Auxiliary result buffer containing the instance
                                        // descriptors, has to be in upload heap
-
-	// For CreateFallbackWrappedPointer()
-	ID3D12Device *device,
-	ID3D12RaytracingFallbackDevice *fallbackDevice,
-	ID3D12DescriptorHeap *descriptorHeap,
-	UINT &descriptorsAllocated,
-	UINT descriptorSize,
-
+    std::function<WRAPPED_GPU_POINTER(ID3D12Resource*, UINT)> 
+        createWrappedPtrFunc,
     bool updateOnly /*= false*/,       // If true, simply refit the existing
                                        // acceleration structure
     ID3D12Resource* previousResult /*= nullptr*/ // Optional previous acceleration
@@ -368,9 +361,8 @@ void TopLevelASGenerator::Generate(
         m_instances[i].transform); // GLM is column major, the INSTANCE_DESC is row major
     memcpy(instanceDescs[i].Transform, &m, sizeof(instanceDescs[i].Transform));
     // Get access to the bottom level
-    instanceDescs[i].AccelerationStructure = CreateFallbackWrappedPointer(
-		device, fallbackDevice, descriptorHeap, descriptorsAllocated, descriptorSize, 
-		m_instances[i].bottomLevelAS, static_cast<UINT>(m_resultSizeInBytes) / sizeof(UINT32));
+    instanceDescs[i].AccelerationStructure = createWrappedPtrFunc(
+        m_instances[i].bottomLevelAS, static_cast<UINT>(m_resultSizeInBytes) / sizeof(UINT32));
     // Visibility mask, always visible here - TODO: should be accessible from
     // outside
     instanceDescs[i].InstanceMask = 0xFF;
@@ -413,10 +405,6 @@ void TopLevelASGenerator::Generate(
                                                 m_scratchSizeInBytes};
   buildDesc.SourceAccelerationStructureData = pSourceAS;
   buildDesc.Flags = flags;
-
-  // Set the descriptor heaps to be used during acceleration structure build for the Fallback Layer.
-  ID3D12DescriptorHeap *pDescriptorHeaps[] = { descriptorHeap };
-  rtCmdList->SetDescriptorHeaps(ARRAYSIZE(pDescriptorHeaps), pDescriptorHeaps);
 
   // Build the top-level AS
   rtCmdList->BuildRaytracingAccelerationStructure(&buildDesc);

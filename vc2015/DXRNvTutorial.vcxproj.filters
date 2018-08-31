@@ -83,9 +83,6 @@
     <ClInclude Include="..\include\nv_helpers_dx12\DXRHelper.h">
       <Filter>Header Files\NvHelpers</Filter>
     </ClInclude>
-    <ClInclude Include="..\include\nv_helpers_dx12\DXRFallbackLayerUtils.h">
-      <Filter>Header Files\NvHelpers</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\Main.cpp">

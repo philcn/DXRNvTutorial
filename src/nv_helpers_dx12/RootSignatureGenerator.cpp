@@ -195,41 +195,41 @@ ID3D12RootSignature* RootSignatureGenerator::Generate(ID3D12Device* device, bool
 // Fallback layer implementation
 ID3D12RootSignature* RootSignatureGenerator::Generate(ID3D12RaytracingFallbackDevice* fallbackDevice, bool isLocal)
 {
-	// Go through all the parameters, and set the actual addresses of the heap range descriptors based
-	// on their indices in the range set array
-	for (size_t i = 0; i < m_parameters.size(); i++)
-	{
-		if (m_parameters[i].ParameterType == D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE)
-		{
-			m_parameters[i].DescriptorTable.pDescriptorRanges = m_ranges[m_rangeLocations[i]].data();
-		}
-	}
-	// Specify the root signature with its set of parameters
-	D3D12_ROOT_SIGNATURE_DESC rootDesc = {};
-	rootDesc.NumParameters = static_cast<UINT>(m_parameters.size());
-	rootDesc.pParameters = m_parameters.data();
-	// Set the flags of the signature. By default root signatures are global, for example for vertex
-	// and pixel shaders. For raytracing shaders the root signatures are local.
-	rootDesc.Flags =
-		isLocal ? D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE : D3D12_ROOT_SIGNATURE_FLAG_NONE;
+  // Go through all the parameters, and set the actual addresses of the heap range descriptors based
+  // on their indices in the range set array
+  for (size_t i = 0; i < m_parameters.size(); i++)
+  {
+    if (m_parameters[i].ParameterType == D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE)
+    {
+      m_parameters[i].DescriptorTable.pDescriptorRanges = m_ranges[m_rangeLocations[i]].data();
+    }
+  }
+  // Specify the root signature with its set of parameters
+  D3D12_ROOT_SIGNATURE_DESC rootDesc = {};
+  rootDesc.NumParameters = static_cast<UINT>(m_parameters.size());
+  rootDesc.pParameters = m_parameters.data();
+  // Set the flags of the signature. By default root signatures are global, for example for vertex
+  // and pixel shaders. For raytracing shaders the root signatures are local.
+  rootDesc.Flags =
+      isLocal ? D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE : D3D12_ROOT_SIGNATURE_FLAG_NONE;
 
-	// Create the root signature from its descriptor
-	ID3DBlob* pSigBlob;
-	ID3DBlob* pErrorBlob;
-	HRESULT hr = fallbackDevice->D3D12SerializeRootSignature(&rootDesc, D3D_ROOT_SIGNATURE_VERSION_1_0, &pSigBlob,
-		&pErrorBlob);
-	if (FAILED(hr))
-	{
-		throw std::logic_error("Cannot serialize root signature");
-	}
-	ID3D12RootSignature* pRootSig;
-	hr = fallbackDevice->CreateRootSignature(0, pSigBlob->GetBufferPointer(), pSigBlob->GetBufferSize(),
-		IID_PPV_ARGS(&pRootSig));
-	if (FAILED(hr))
-	{
-		throw std::logic_error("Cannot create root signature");
-	}
-	return pRootSig;
+  // Create the root signature from its descriptor
+  ID3DBlob* pSigBlob;
+  ID3DBlob* pErrorBlob;
+  HRESULT hr = fallbackDevice->D3D12SerializeRootSignature(&rootDesc, D3D_ROOT_SIGNATURE_VERSION_1_0, &pSigBlob,
+                                                           &pErrorBlob);
+  if (FAILED(hr))
+  {
+    throw std::logic_error("Cannot serialize root signature");
+  }
+  ID3D12RootSignature* pRootSig;
+  hr = fallbackDevice->CreateRootSignature(0, pSigBlob->GetBufferPointer(), pSigBlob->GetBufferSize(),
+                                           IID_PPV_ARGS(&pRootSig));
+  if (FAILED(hr))
+  {
+    throw std::logic_error("Cannot create root signature");
+  }
+  return pRootSig;
 }
 
 } // namespace nv_helpers_dx12

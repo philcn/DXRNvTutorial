@@ -112,10 +112,10 @@ uint32_t ShaderBindingTableGenerator::ComputeSBTSize(ID3D12RaytracingFallbackDev
   // The total SBT size is the sum of the entries for ray generation, miss and hit groups, aligned
   // on 256 bytes
   uint32_t sbtSize = ROUND_UP(m_rayGenEntrySize * static_cast<UINT>(m_rayGen.size()) +
-	  m_missEntrySize * static_cast<UINT>(m_miss.size()) +
-	  m_hitGroupEntrySize * static_cast<UINT>(m_hitGroup.size()),
-	  256);
-  return sbtSize; 
+                                  m_missEntrySize * static_cast<UINT>(m_miss.size()) +
+                                  m_hitGroupEntrySize * static_cast<UINT>(m_hitGroup.size()),
+                              256);
+  return sbtSize;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -151,29 +151,29 @@ void ShaderBindingTableGenerator::Generate(ID3D12Resource* sbtBuffer,
 
 // Fallback layer implementation
 void ShaderBindingTableGenerator::Generate(ID3D12Resource* sbtBuffer,
-	ID3D12RaytracingFallbackStateObject* fallbackStateObject)
+                                           ID3D12RaytracingFallbackStateObject* fallbackStateObject)
 {
-	// Map the SBT
-	uint8_t* pData;
-	HRESULT hr = sbtBuffer->Map(0, nullptr, reinterpret_cast<void**>(&pData));
-	if (FAILED(hr))
-	{
-		throw std::logic_error("Could not map the shader binding table");
-	}
-	// Copy the shader identifiers followed by their resource pointers or root constants: first the
-	// ray generation, then the miss shaders, and finally the set of hit groups
-	uint32_t offset = 0;
+  // Map the SBT
+  uint8_t* pData;
+  HRESULT hr = sbtBuffer->Map(0, nullptr, reinterpret_cast<void**>(&pData));
+  if (FAILED(hr))
+  {
+    throw std::logic_error("Could not map the shader binding table");
+  }
+  // Copy the shader identifiers followed by their resource pointers or root constants: first the
+  // ray generation, then the miss shaders, and finally the set of hit groups
+  uint32_t offset = 0;
 
-	offset = CopyShaderData(fallbackStateObject, pData, m_rayGen, m_rayGenEntrySize);
-	pData += offset;
+  offset = CopyShaderData(fallbackStateObject, pData, m_rayGen, m_rayGenEntrySize);
+  pData += offset;
 
-	offset = CopyShaderData(fallbackStateObject, pData, m_miss, m_missEntrySize);
-	pData += offset;
+  offset = CopyShaderData(fallbackStateObject, pData, m_miss, m_missEntrySize);
+  pData += offset;
 
-	offset = CopyShaderData(fallbackStateObject, pData, m_hitGroup, m_hitGroupEntrySize);
+  offset = CopyShaderData(fallbackStateObject, pData, m_hitGroup, m_hitGroupEntrySize);
 
-	// Unmap the SBT
-	sbtBuffer->Unmap(0, nullptr);
+  // Unmap the SBT
+  sbtBuffer->Unmap(0, nullptr);
 }
 
 
@@ -277,29 +277,29 @@ uint32_t ShaderBindingTableGenerator::CopyShaderData(
 
 // Fallback layer implementation
 uint32_t ShaderBindingTableGenerator::CopyShaderData(
-	ID3D12RaytracingFallbackStateObject* fallbackStateObject, uint8_t* outputData,
-	const std::vector<SBTEntry>& shaders, uint32_t entrySize)
+    ID3D12RaytracingFallbackStateObject* fallbackStateObject, uint8_t* outputData,
+    const std::vector<SBTEntry>& shaders, uint32_t entrySize)
 {
-	uint8_t* pData = outputData;
-	for (const auto& shader : shaders)
-	{
-		// Get the shader identifier, and check whether that identifier is known
-		void* id = fallbackStateObject->GetShaderIdentifier(shader.m_entryPoint.c_str());
-		if (!id)
-		{
-			std::wstring errMsg(std::wstring(L"Unknown shader identifier used in the SBT: ") +
-				shader.m_entryPoint);
-			throw std::logic_error(std::string(errMsg.begin(), errMsg.end()));
-		}
-		// Copy the shader identifier
-		memcpy(pData, id, m_progIdSize);
-		// Copy all its resources pointers or values in bulk
-		memcpy(pData + m_progIdSize, shader.m_inputData.data(), shader.m_inputData.size() * 8);
+  uint8_t* pData = outputData;
+  for (const auto& shader : shaders)
+  {
+    // Get the shader identifier, and check whether that identifier is known
+    void* id = fallbackStateObject->GetShaderIdentifier(shader.m_entryPoint.c_str());
+    if (!id)
+    {
+        std::wstring errMsg(std::wstring(L"Unknown shader identifier used in the SBT: ") +
+            shader.m_entryPoint);
+        throw std::logic_error(std::string(errMsg.begin(), errMsg.end()));
+    }
+    // Copy the shader identifier
+    memcpy(pData, id, m_progIdSize);
+    // Copy all its resources pointers or values in bulk
+    memcpy(pData + m_progIdSize, shader.m_inputData.data(), shader.m_inputData.size() * 8);
 
-		pData += entrySize;
-	}
-	// Return the number of bytes actually written to the output buffer
-	return static_cast<uint32_t>(shaders.size()) * entrySize;
+    pData += entrySize;
+  }
+  // Return the number of bytes actually written to the output buffer
+  return static_cast<uint32_t>(shaders.size()) * entrySize;
 }
 
 //--------------------------------------------------------------------------------------------------

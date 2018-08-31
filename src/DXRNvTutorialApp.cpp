@@ -230,8 +230,11 @@ AccelerationStructureBuffers DXRNvTutorialApp::CreateTopLevelAS(const std::vecto
         D3D12_RESOURCE_STATE_GENERIC_READ, nv_helpers_dx12::kUploadHeapProps); 
 
     auto commandList = m_deviceResources->GetCommandList();
-    tlasGenerator.Generate(commandList, mFallbackCommandList.Get(), buffers.scratch.Get(), buffers.accelerationStructure.Get(), buffers.instanceDesc.Get(), 
-        device, mFallbackDevice.Get(), mDescriptorHeap.Get(), mDescriptorsAllocated, mDescriptorSize);
+    tlasGenerator.Generate(commandList, mFallbackCommandList.Get(), 
+        buffers.scratch.Get(), buffers.accelerationStructure.Get(), buffers.instanceDesc.Get(), 
+        [&](ID3D12Resource *resource, UINT bufferNumElements) -> WRAPPED_GPU_POINTER {
+            return CreateFallbackWrappedPointer(resource, bufferNumElements);
+    });
 
     return buffers;
 }

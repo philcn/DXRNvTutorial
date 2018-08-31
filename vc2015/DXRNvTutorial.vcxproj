@@ -125,7 +125,6 @@ PostbuildCopy.bat "$(SolutionDir)vc2015\build\bin\$(Configuration)\"
     <ClInclude Include="..\include\dxcapi.use.h" />
     <ClInclude Include="..\include\DXRNvTutorialApp.h" />
     <ClInclude Include="..\include\nv_helpers_dx12\BottomLevelASGenerator.h" />
-    <ClInclude Include="..\include\nv_helpers_dx12\DXRFallbackLayerUtils.h" />
     <ClInclude Include="..\include\nv_helpers_dx12\DXRHelper.h" />
     <ClInclude Include="..\include\nv_helpers_dx12\RaytracingPipelineGenerator.h" />
     <ClInclude Include="..\include\nv_helpers_dx12\RootSignatureGenerator.h" />

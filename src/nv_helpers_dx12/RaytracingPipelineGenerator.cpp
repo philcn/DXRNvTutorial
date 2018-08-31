@@ -61,12 +61,12 @@ RayTracingPipelineGenerator::RayTracingPipelineGenerator(ID3D12Device* device,
 
 
 RayTracingPipelineGenerator::RayTracingPipelineGenerator(ID3D12Device* device, 
-														 ID3D12RaytracingFallbackDevice* fallbackDevice)
-	: m_device(device), m_fallbackDevice(fallbackDevice)
+                                                         ID3D12RaytracingFallbackDevice* fallbackDevice)
+    : m_device(device), m_fallbackDevice(fallbackDevice)
 {
-	// The pipeline creation requires having at least one empty global and local root signatures, so
-	// we systematically create both, as this does not incur any overhead
-	FallbackCreateDummyRootSignatures();
+  // The pipeline creation requires having at least one empty global and local root signatures, so
+  // we systematically create both, as this does not incur any overhead
+  FallbackCreateDummyRootSignatures();
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -81,9 +81,8 @@ void RayTracingPipelineGenerator::AddLibrary(IDxcBlob* dxilLibrary,
 }
 
 void RayTracingPipelineGenerator::AddLibrary(const void *shaderBytecode, UINT bytecodeSize,
-	const std::vector<std::wstring>& symbolExports)
+                                             const std::vector<std::wstring>& symbolExports)
 {
-	m_libraries.emplace_back(Library(shaderBytecode, bytecodeSize, symbolExports));
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -151,7 +150,6 @@ void RayTracingPipelineGenerator::SetMaxRecursionDepth(UINT maxDepth)
 //--------------------------------------------------------------------------------------------------
 //
 // Compiles the raytracing state object
-ID3D12StateObjectPrototype* RayTracingPipelineGenerator::Generate()
 {
   // The pipeline is made of a set of sub-objects, representing the DXIL libraries, hit group
   // declarations, root signature associations, plus some configuration objects
@@ -255,10 +253,158 @@ ID3D12StateObjectPrototype* RayTracingPipelineGenerator::Generate()
     subobjects[currentIndex++] = rootSigAssociationObject;
   }
 
-  // The pipeline construction always requires an empty global root signature
+  // The pipeline construction always requires a global root signature
   D3D12_STATE_SUBOBJECT globalRootSig;
   globalRootSig.Type = D3D12_STATE_SUBOBJECT_TYPE_ROOT_SIGNATURE;
-  ID3D12RootSignature* dgSig = m_dummyGlobalRootSignature;
+  ID3D12RootSignature* dgSig = globalRootSignature ? globalRootSignature : m_dummyGlobalRootSignature;
+  globalRootSig.pDesc = &dgSig;
+
+  subobjects[currentIndex++] = globalRootSig;
+
+  // The pipeline construction always requires an empty local root signature
+  D3D12_STATE_SUBOBJECT dummyLocalRootSig;
+  dummyLocalRootSig.Type = D3D12_STATE_SUBOBJECT_TYPE_LOCAL_ROOT_SIGNATURE;
+  ID3D12RootSignature* dlSig = m_dummyLocalRootSignature;
+  dummyLocalRootSig.pDesc = &dlSig;
+  subobjects[currentIndex++] = dummyLocalRootSig;
+
+  // Add a subobject for the ray tracing pipeline configuration
+  D3D12_RAYTRACING_PIPELINE_CONFIG pipelineConfig = {};
+  pipelineConfig.MaxTraceRecursionDepth = m_maxRecursionDepth;
+
+  D3D12_STATE_SUBOBJECT pipelineConfigObject = {};
+  pipelineConfigObject.Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_PIPELINE_CONFIG;
+  pipelineConfigObject.pDesc = &pipelineConfig;
+
+  subobjects[currentIndex++] = pipelineConfigObject;
+
+  // Describe the ray tracing pipeline state object
+  D3D12_STATE_OBJECT_DESC pipelineDesc = {};
+  pipelineDesc.Type = D3D12_STATE_OBJECT_TYPE_RAYTRACING_PIPELINE;
+  pipelineDesc.NumSubobjects = currentIndex; // static_cast<UINT>(subobjects.size());
+  pipelineDesc.pSubobjects = subobjects.data();
+  
+  ID3D12StateObjectPrototype* rtStateObject = nullptr;
+
+  // Create the state object
+  HRESULT hr = m_rtDevice->CreateStateObject(&pipelineDesc, IID_PPV_ARGS(&rtStateObject));
+  if (FAILED(hr))
+  {
+    throw std::logic_error("Could not create the raytracing state object");
+  }
+
+  return rtStateObject;
+}
+
+// Fallback layer implementation
+ID3D12RaytracingFallbackStateObject* RayTracingPipelineGenerator::FallbackGenerate(ID3D12RootSignature* globalRootSignature)
+{
+  // The pipeline is made of a set of sub-objects, representing the DXIL libraries, hit group
+  // declarations, root signature associations, plus some configuration objects
+  UINT64 subobjectCount =
+      m_libraries.size() +                     // DXIL libraries
+      m_hitGroups.size() +                     // Hit group declarations
+      1 +                                      // Shader configuration
+      1 +                                      // Shader payload
+      2 * m_rootSignatureAssociations.size() + // Root signature declaration + association
+      2 +                                      // Empty global and local root signatures
+      1;                                       // Final pipeline subobject
+
+  // Initialize a vector with the target object count. It is necessary to make the allocation before
+  // adding subobjects as some subobjects reference other subobjects by pointer. Using push_back may
+  // reallocate the array and invalidate those pointers.
+  std::vector<D3D12_STATE_SUBOBJECT> subobjects(subobjectCount);
+
+  UINT currentIndex = 0;
+
+  // Add all the DXIL libraries
+  for (const Library& lib : m_libraries)
+  {
+    D3D12_STATE_SUBOBJECT libSubobject = {};
+    libSubobject.Type = D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY;
+    libSubobject.pDesc = &lib.m_libDesc;
+
+    subobjects[currentIndex++] = libSubobject;
+  }
+
+  // Add all the hit group declarations
+  for (const HitGroup& group : m_hitGroups)
+  {
+    D3D12_STATE_SUBOBJECT hitGroup = {};
+    hitGroup.Type = D3D12_STATE_SUBOBJECT_TYPE_HIT_GROUP;
+    hitGroup.pDesc = &group.m_desc;
+
+    subobjects[currentIndex++] = hitGroup;
+  }
+
+  // Add a subobject for the shader payload configuration
+  D3D12_RAYTRACING_SHADER_CONFIG shaderDesc = {};
+  shaderDesc.MaxPayloadSizeInBytes = m_maxPayLoadSizeInBytes;
+  shaderDesc.MaxAttributeSizeInBytes = m_maxAttributeSizeInBytes;
+
+  D3D12_STATE_SUBOBJECT shaderConfigObject = {};
+  shaderConfigObject.Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_SHADER_CONFIG;
+  shaderConfigObject.pDesc = &shaderDesc;
+
+  subobjects[currentIndex++] = shaderConfigObject;
+
+  // Build a list of all the symbols for ray generation, miss and hit groups
+  // Those shaders have to be associated with the payload definition
+  std::vector<std::wstring> exportedSymbols = {};
+  std::vector<LPCWSTR> exportedSymbolPointers = {};
+  BuildShaderExportList(exportedSymbols);
+
+  // Build an array of the string pointers
+  exportedSymbolPointers.reserve(exportedSymbols.size());
+  for (const auto& name : exportedSymbols)
+  {
+    exportedSymbolPointers.push_back(name.c_str());
+  }
+  const WCHAR** shaderExports = exportedSymbolPointers.data();
+
+  // Add a subobject for the association between shaders and the payload
+  D3D12_SUBOBJECT_TO_EXPORTS_ASSOCIATION shaderPayloadAssociation = {};
+  shaderPayloadAssociation.NumExports = static_cast<UINT>(exportedSymbols.size());
+  shaderPayloadAssociation.pExports = shaderExports;
+
+  // Associate the set of shaders with the payload defined in the previous subobject
+  shaderPayloadAssociation.pSubobjectToAssociate = &subobjects[(currentIndex - 1)];
+
+  // Create and store the payload association object
+  D3D12_STATE_SUBOBJECT shaderPayloadAssociationObject = {};
+  shaderPayloadAssociationObject.Type = D3D12_STATE_SUBOBJECT_TYPE_SUBOBJECT_TO_EXPORTS_ASSOCIATION;
+  shaderPayloadAssociationObject.pDesc = &shaderPayloadAssociation;
+  subobjects[currentIndex++] = shaderPayloadAssociationObject;
+
+  // The root signature association requires two objects for each: one to declare the root
+  // signature, and another to associate that root signature to a set of symbols
+  for (RootSignatureAssociation& assoc : m_rootSignatureAssociations)
+  {
+
+    // Add a subobject to declare the root signature
+    D3D12_STATE_SUBOBJECT rootSigObject = {};
+    rootSigObject.Type = D3D12_STATE_SUBOBJECT_TYPE_LOCAL_ROOT_SIGNATURE;
+    rootSigObject.pDesc = &assoc.m_rootSignature;
+
+    subobjects[currentIndex++] = rootSigObject;
+
+    // Add a subobject for the association between the exported shader symbols and the root
+    // signature
+    assoc.m_association.NumExports = static_cast<UINT>(assoc.m_symbolPointers.size());
+    assoc.m_association.pExports = assoc.m_symbolPointers.data();
+    assoc.m_association.pSubobjectToAssociate = &subobjects[(currentIndex - 1)];
+
+    D3D12_STATE_SUBOBJECT rootSigAssociationObject = {};
+    rootSigAssociationObject.Type = D3D12_STATE_SUBOBJECT_TYPE_SUBOBJECT_TO_EXPORTS_ASSOCIATION;
+    rootSigAssociationObject.pDesc = &assoc.m_association;
+
+    subobjects[currentIndex++] = rootSigAssociationObject;
+  }
+
+  // The pipeline construction always requires a global root signature
+  D3D12_STATE_SUBOBJECT globalRootSig;
+  globalRootSig.Type = D3D12_STATE_SUBOBJECT_TYPE_ROOT_SIGNATURE;
+  ID3D12RootSignature* dgSig = globalRootSignature ? globalRootSignature : m_dummyGlobalRootSignature;
   globalRootSig.pDesc = &dgSig;
 
   subobjects[currentIndex++] = globalRootSig;
@@ -286,164 +432,18 @@ ID3D12StateObjectPrototype* RayTracingPipelineGenerator::Generate()
   pipelineDesc.NumSubobjects = currentIndex; // static_cast<UINT>(subobjects.size());
   pipelineDesc.pSubobjects = subobjects.data();
 
-  ID3D12StateObjectPrototype* rtStateObject = nullptr;
+  ID3D12RaytracingFallbackStateObject* fallbackStateObject = nullptr;
 
   // Create the state object
-  HRESULT hr = m_rtDevice->CreateStateObject(&pipelineDesc, IID_PPV_ARGS(&rtStateObject));
+  HRESULT hr = m_fallbackDevice->CreateStateObject(&pipelineDesc, IID_PPV_ARGS(&fallbackStateObject));
   if (FAILED(hr))
   {
     throw std::logic_error("Could not create the raytracing state object");
   }
-  return rtStateObject;
+
+  return fallbackStateObject;
 }
 
-// Fallback layer implementation
-ID3D12RaytracingFallbackStateObject* RayTracingPipelineGenerator::FallbackGenerate(ID3D12RootSignature *globalRootSignature)
-{
-	// The pipeline is made of a set of sub-objects, representing the DXIL libraries, hit group
-	// declarations, root signature associations, plus some configuration objects
-	UINT64 subobjectCount =
-		m_libraries.size() +                     // DXIL libraries
-		m_hitGroups.size() +                     // Hit group declarations
-		1 +                                      // Shader configuration
-		1 +                                      // Shader payload
-		2 * m_rootSignatureAssociations.size() + // Root signature declaration + association
-		2 +                                      // Empty global and local root signatures
-		1;                                       // Final pipeline subobject
-
-												 // Initialize a vector with the target object count. It is necessary to make the allocation before
-												 // adding subobjects as some subobjects reference other subobjects by pointer. Using push_back may
-												 // reallocate the array and invalidate those pointers.
-	std::vector<D3D12_STATE_SUBOBJECT> subobjects(subobjectCount);
-
-	UINT currentIndex = 0;
-
-	// Add all the DXIL libraries
-	for (const Library& lib : m_libraries)
-	{
-		D3D12_STATE_SUBOBJECT libSubobject = {};
-		libSubobject.Type = D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY;
-		libSubobject.pDesc = &lib.m_libDesc;
-
-		subobjects[currentIndex++] = libSubobject;
-	}
-
-	// Add all the hit group declarations
-	for (const HitGroup& group : m_hitGroups)
-	{
-		D3D12_STATE_SUBOBJECT hitGroup = {};
-		hitGroup.Type = D3D12_STATE_SUBOBJECT_TYPE_HIT_GROUP;
-		hitGroup.pDesc = &group.m_desc;
-
-		subobjects[currentIndex++] = hitGroup;
-	}
-
-	// Add a subobject for the shader payload configuration
-	D3D12_RAYTRACING_SHADER_CONFIG shaderDesc = {};
-	shaderDesc.MaxPayloadSizeInBytes = m_maxPayLoadSizeInBytes;
-	shaderDesc.MaxAttributeSizeInBytes = m_maxAttributeSizeInBytes;
-
-	D3D12_STATE_SUBOBJECT shaderConfigObject = {};
-	shaderConfigObject.Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_SHADER_CONFIG;
-	shaderConfigObject.pDesc = &shaderDesc;
-
-	subobjects[currentIndex++] = shaderConfigObject;
-
-	// Build a list of all the symbols for ray generation, miss and hit groups
-	// Those shaders have to be associated with the payload definition
-	std::vector<std::wstring> exportedSymbols = {};
-	std::vector<LPCWSTR> exportedSymbolPointers = {};
-	BuildShaderExportList(exportedSymbols);
-
-	// Build an array of the string pointers
-	exportedSymbolPointers.reserve(exportedSymbols.size());
-	for (const auto& name : exportedSymbols)
-	{
-		exportedSymbolPointers.push_back(name.c_str());
-	}
-	const WCHAR** shaderExports = exportedSymbolPointers.data();
-
-	// Add a subobject for the association between shaders and the payload
-	D3D12_SUBOBJECT_TO_EXPORTS_ASSOCIATION shaderPayloadAssociation = {};
-	shaderPayloadAssociation.NumExports = static_cast<UINT>(exportedSymbols.size());
-	shaderPayloadAssociation.pExports = shaderExports;
-
-	// Associate the set of shaders with the payload defined in the previous subobject
-	shaderPayloadAssociation.pSubobjectToAssociate = &subobjects[(currentIndex - 1)];
-
-	// Create and store the payload association object
-	D3D12_STATE_SUBOBJECT shaderPayloadAssociationObject = {};
-	shaderPayloadAssociationObject.Type = D3D12_STATE_SUBOBJECT_TYPE_SUBOBJECT_TO_EXPORTS_ASSOCIATION;
-	shaderPayloadAssociationObject.pDesc = &shaderPayloadAssociation;
-	subobjects[currentIndex++] = shaderPayloadAssociationObject;
-
-	// The root signature association requires two objects for each: one to declare the root
-	// signature, and another to associate that root signature to a set of symbols
-	for (RootSignatureAssociation& assoc : m_rootSignatureAssociations)
-	{
-
-		// Add a subobject to declare the root signature
-		D3D12_STATE_SUBOBJECT rootSigObject = {};
-		rootSigObject.Type = D3D12_STATE_SUBOBJECT_TYPE_LOCAL_ROOT_SIGNATURE;
-		rootSigObject.pDesc = &assoc.m_rootSignature;
-
-		subobjects[currentIndex++] = rootSigObject;
-
-		// Add a subobject for the association between the exported shader symbols and the root
-		// signature
-		assoc.m_association.NumExports = static_cast<UINT>(assoc.m_symbolPointers.size());
-		assoc.m_association.pExports = assoc.m_symbolPointers.data();
-		assoc.m_association.pSubobjectToAssociate = &subobjects[(currentIndex - 1)];
-
-		D3D12_STATE_SUBOBJECT rootSigAssociationObject = {};
-		rootSigAssociationObject.Type = D3D12_STATE_SUBOBJECT_TYPE_SUBOBJECT_TO_EXPORTS_ASSOCIATION;
-		rootSigAssociationObject.pDesc = &assoc.m_association;
-
-		subobjects[currentIndex++] = rootSigAssociationObject;
-	}
-
-	// The pipeline construction always requires an empty global root signature
-	D3D12_STATE_SUBOBJECT globalRootSig;
-	globalRootSig.Type = D3D12_STATE_SUBOBJECT_TYPE_ROOT_SIGNATURE;
-	ID3D12RootSignature* dgSig = globalRootSignature ? globalRootSignature : m_dummyGlobalRootSignature;
-	globalRootSig.pDesc = &dgSig;
-
-	subobjects[currentIndex++] = globalRootSig;
-
-	// The pipeline construction always requires an empty local root signature
-	D3D12_STATE_SUBOBJECT dummyLocalRootSig;
-	dummyLocalRootSig.Type = D3D12_STATE_SUBOBJECT_TYPE_LOCAL_ROOT_SIGNATURE;
-	ID3D12RootSignature* dlSig = m_dummyLocalRootSignature;
-	dummyLocalRootSig.pDesc = &dlSig;
-	subobjects[currentIndex++] = dummyLocalRootSig;
-
-	// Add a subobject for the ray tracing pipeline configuration
-	D3D12_RAYTRACING_PIPELINE_CONFIG pipelineConfig = {};
-	pipelineConfig.MaxTraceRecursionDepth = m_maxRecursionDepth;
-
-	D3D12_STATE_SUBOBJECT pipelineConfigObject = {};
-	pipelineConfigObject.Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_PIPELINE_CONFIG;
-	pipelineConfigObject.pDesc = &pipelineConfig;
-
-	subobjects[currentIndex++] = pipelineConfigObject;
-
-	// Describe the ray tracing pipeline state object
-	D3D12_STATE_OBJECT_DESC pipelineDesc = {};
-	pipelineDesc.Type = D3D12_STATE_OBJECT_TYPE_RAYTRACING_PIPELINE;
-	pipelineDesc.NumSubobjects = currentIndex; // static_cast<UINT>(subobjects.size());
-	pipelineDesc.pSubobjects = subobjects.data();
-
-	ID3D12RaytracingFallbackStateObject* fallbackStateObject = nullptr;
-
-	// Create the state object
-	HRESULT hr = m_fallbackDevice->CreateStateObject(&pipelineDesc, IID_PPV_ARGS(&fallbackStateObject));
-	if (FAILED(hr))
-	{
-		throw std::logic_error("Could not create the raytracing state object");
-	}
-
-	return fallbackStateObject;
-}
 
 //--------------------------------------------------------------------------------------------------
 //
@@ -502,52 +502,52 @@ void RayTracingPipelineGenerator::CreateDummyRootSignatures()
 // Fallback layer implementation
 void RayTracingPipelineGenerator::FallbackCreateDummyRootSignatures()
 {
-	// Creation of the global root signature
-	D3D12_ROOT_SIGNATURE_DESC rootDesc = {};
-	rootDesc.NumParameters = 0;
-	rootDesc.pParameters = nullptr;
-	// A global root signature is the default, hence this flag
-	rootDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
+  // Creation of the global root signature
+  D3D12_ROOT_SIGNATURE_DESC rootDesc = {};
+  rootDesc.NumParameters = 0;
+  rootDesc.pParameters = nullptr;
+  // A global root signature is the default, hence this flag
+  rootDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
 
-	HRESULT hr = 0;
+  HRESULT hr = 0;
 
-	ID3DBlob* serializedRootSignature;
-	ID3DBlob* error;
+  ID3DBlob* serializedRootSignature;
+  ID3DBlob* error;
 
-	// Create the empty global root signature
-	hr = m_fallbackDevice->D3D12SerializeRootSignature(&rootDesc, D3D_ROOT_SIGNATURE_VERSION_1,
-		&serializedRootSignature, &error);
-	if (FAILED(hr))
-	{
-		throw std::logic_error("Could not serialize the global root signature");
-	}
-	hr = m_fallbackDevice->CreateRootSignature(0, serializedRootSignature->GetBufferPointer(),
-		serializedRootSignature->GetBufferSize(),
-		IID_PPV_ARGS(&m_dummyGlobalRootSignature));
+  // Create the empty global root signature
+  hr = m_fallbackDevice->D3D12SerializeRootSignature(&rootDesc, D3D_ROOT_SIGNATURE_VERSION_1,
+                                                     &serializedRootSignature, &error);
+  if (FAILED(hr))
+  {
+      throw std::logic_error("Could not serialize the global root signature");
+  }
+  hr = m_fallbackDevice->CreateRootSignature(0, serializedRootSignature->GetBufferPointer(),
+                                             serializedRootSignature->GetBufferSize(),
+                                             IID_PPV_ARGS(&m_dummyGlobalRootSignature));
 
-	serializedRootSignature->Release();
-	if (FAILED(hr))
-	{
-		throw std::logic_error("Could not create the global root signature");
-	}
+  serializedRootSignature->Release();
+  if (FAILED(hr))
+  {
+    throw std::logic_error("Could not create the global root signature");
+  }
 
-	// Create the local root signature, reusing the same descriptor but altering the creation flag
-	rootDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE;
-	hr = m_fallbackDevice->D3D12SerializeRootSignature(&rootDesc, D3D_ROOT_SIGNATURE_VERSION_1,
-		&serializedRootSignature, &error);
-	if (FAILED(hr))
-	{
-		throw std::logic_error("Could not serialize the local root signature");
-	}
-	hr = m_fallbackDevice->CreateRootSignature(0, serializedRootSignature->GetBufferPointer(),
-		serializedRootSignature->GetBufferSize(),
-		IID_PPV_ARGS(&m_dummyLocalRootSignature));
+  // Create the local root signature, reusing the same descriptor but altering the creation flag
+  rootDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE;
+  hr = m_fallbackDevice->D3D12SerializeRootSignature(&rootDesc, D3D_ROOT_SIGNATURE_VERSION_1,
+                                                     &serializedRootSignature, &error);
+  if (FAILED(hr))
+  {
+    throw std::logic_error("Could not serialize the local root signature");
+  }
+  hr = m_fallbackDevice->CreateRootSignature(0, serializedRootSignature->GetBufferPointer(),
+                                             serializedRootSignature->GetBufferSize(),
+                                             IID_PPV_ARGS(&m_dummyLocalRootSignature));
 
-	serializedRootSignature->Release();
-	if (FAILED(hr))
-	{
-		throw std::logic_error("Could not create the local root signature");
-	}
+  serializedRootSignature->Release();
+  if (FAILED(hr))
+  {
+    throw std::logic_error("Could not create the local root signature");
+  }	
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -653,32 +653,32 @@ RayTracingPipelineGenerator::Library::Library(IDxcBlob* dxil,
                                               const std::vector<std::wstring>& exportedSymbols)
     : m_dxil(dxil), m_exportedSymbols(exportedSymbols), m_exports(exportedSymbols.size())
 {
-	Construct(dxil->GetBufferPointer(), dxil->GetBufferSize());
+  Construct(dxil->GetBufferPointer(), dxil->GetBufferSize());
 }
 
 RayTracingPipelineGenerator::Library::Library(const void *shaderBytecode, UINT bytecodeSize, 
-	const std::vector<std::wstring>& exportedSymbols)
-	: m_dxil(nullptr), m_exportedSymbols(exportedSymbols), m_exports(exportedSymbols.size())
+                                              const std::vector<std::wstring>& exportedSymbols)
+    : m_dxil(nullptr), m_exportedSymbols(exportedSymbols), m_exports(exportedSymbols.size())
 {
-	Construct(shaderBytecode, bytecodeSize);
+  Construct(shaderBytecode, bytecodeSize);
 }
 
 void RayTracingPipelineGenerator::Library::Construct(const void *shaderBytecode, UINT bytecodeSize)
 {
-	// Create one export descriptor per symbol
-	for (size_t i = 0; i < m_exportedSymbols.size(); i++)
-	{
-		m_exports[i] = {};
-		m_exports[i].Name = m_exportedSymbols[i].c_str();
-		m_exports[i].ExportToRename = nullptr;
-		m_exports[i].Flags = D3D12_EXPORT_FLAG_NONE;
-	}
+  // Create one export descriptor per symbol
+  for (size_t i = 0; i < m_exportedSymbols.size(); i++)
+  {
+    m_exports[i] = {};
+    m_exports[i].Name = m_exportedSymbols[i].c_str();
+    m_exports[i].ExportToRename = nullptr;
+    m_exports[i].Flags = D3D12_EXPORT_FLAG_NONE;
+  }
 
-	// Create a library descriptor combining the DXIL code and the export names
-	m_libDesc.DXILLibrary.BytecodeLength = bytecodeSize;
-	m_libDesc.DXILLibrary.pShaderBytecode = shaderBytecode;
-	m_libDesc.NumExports = static_cast<UINT>(m_exportedSymbols.size());
-	m_libDesc.pExports = m_exports.data();
+  // Create a library descriptor combining the DXIL code and the export names
+  m_libDesc.DXILLibrary.BytecodeLength = bytecodeSize;
+  m_libDesc.DXILLibrary.pShaderBytecode = shaderBytecode;
+  m_libDesc.NumExports = static_cast<UINT>(m_exportedSymbols.size());
+  m_libDesc.pExports = m_exports.data();	
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -687,15 +687,15 @@ void RayTracingPipelineGenerator::Library::Construct(const void *shaderBytecode,
 // the default constructor would copy the string pointers of the symbols into the descriptors, which
 // would cause issues when the original Library object gets out of scope
 RayTracingPipelineGenerator::Library::Library(const Library& source)
-	: m_exportedSymbols(source.m_exportedSymbols), m_exports(source.m_exports)
+    : m_exportedSymbols(source.m_exportedSymbols), m_exports(source.m_exports)
 {
-	if (source.m_dxil) {
-		m_dxil = source.m_dxil;
-		Construct(m_dxil->GetBufferPointer(), m_dxil->GetBufferSize());
-	} else {
-		m_dxil = nullptr;
-		Construct(source.m_libDesc.DXILLibrary.pShaderBytecode, source.m_libDesc.DXILLibrary.BytecodeLength);
-	}
+  if (source.m_dxil) {
+    m_dxil = source.m_dxil;
+    Construct(m_dxil->GetBufferPointer(), m_dxil->GetBufferSize());
+  } else {
+    m_dxil = nullptr;
+    Construct(source.m_libDesc.DXILLibrary.pShaderBytecode, source.m_libDesc.DXILLibrary.BytecodeLength);
+  }
 }
 
 //--------------------------------------------------------------------------------------------------

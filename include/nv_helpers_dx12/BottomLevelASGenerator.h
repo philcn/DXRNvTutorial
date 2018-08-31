@@ -143,13 +143,13 @@ public:
 
   /// Fallback layer implementation
   void ComputeASBufferSizes(
-	  ID3D12RaytracingFallbackDevice* device, /// Device on which the build will be performed
-	  bool allowUpdate,           /// If true, the resulting acceleration structure will
-								  /// allow iterative updates
-	  UINT64* scratchSizeInBytes, /// Required scratch memory on the GPU to
-								  /// build the acceleration structure
-	  UINT64* resultSizeInBytes   /// Required GPU memory to store the
-								  /// acceleration structure
+      ID3D12RaytracingFallbackDevice* device, /// Device on which the build will be performed
+      bool allowUpdate,           /// If true, the resulting acceleration structure will
+                                  /// allow iterative updates
+      UINT64* scratchSizeInBytes, /// Required scratch memory on the GPU to
+                                  /// build the acceleration structure
+      UINT64* resultSizeInBytes   /// Required GPU memory to store the
+                                  /// acceleration structure
   );
 
   /// Enqueue the construction of the acceleration structure on a command list, using
@@ -171,16 +171,16 @@ public:
 
   /// Fallback layer implementation
   void Generate(
-	  ID3D12GraphicsCommandList* commandList, /// Command list on which the build will be enqueued
-	  ID3D12RaytracingFallbackCommandList*
-	  rtCmdList,                 /// Same command list, casted into a raytracing list.
-								 /// This will not be needed anymore with Windows 10 RS5.
-	  ID3D12Resource* scratchBuffer, /// Scratch buffer used by the builder to
-									 /// store temporary data
-	  ID3D12Resource* resultBuffer,  /// Result buffer storing the acceleration structure
-	  bool updateOnly = false,       /// If true, simply refit the existing acceleration structure
-	  ID3D12Resource* previousResult = nullptr /// Optional previous acceleration structure, used
-											   /// if an iterative update is requested
+      ID3D12GraphicsCommandList* commandList, /// Command list on which the build will be enqueued
+      ID3D12RaytracingFallbackCommandList*
+          rtCmdList,                 /// Same command list, casted into a raytracing list.
+                                     /// This will not be needed anymore with Windows 10 RS5.
+      ID3D12Resource* scratchBuffer, /// Scratch buffer used by the builder to
+                                     /// store temporary data
+      ID3D12Resource* resultBuffer,  /// Result buffer storing the acceleration structure
+      bool updateOnly = false,       /// If true, simply refit the existing acceleration structure
+      ID3D12Resource* previousResult = nullptr /// Optional previous acceleration structure, used
+                                               /// if an iterative update is requested
   );
 
 private:

@@ -126,10 +126,10 @@ public:
   void SetMaxRecursionDepth(UINT maxDepth);
 
   /// Compiles the raytracing state object
-  ID3D12StateObjectPrototype* Generate();
+  ID3D12StateObjectPrototype* Generate(ID3D12RootSignature* globalRootSignature = nullptr);
 
   /// Fallback layer implementation
-  ID3D12RaytracingFallbackStateObject* FallbackGenerate(ID3D12RootSignature *globalRootSignature);
+  ID3D12RaytracingFallbackStateObject* FallbackGenerate(ID3D12RootSignature* globalRootSignature = nullptr);
 
 private:
   /// Storage for DXIL libraries and their exported symbols

@@ -74,6 +74,7 @@ return buffers;
 #include "D3D12RaytracingFallback.h"
 
 #include <vector>
+#include <functional>
 
 namespace nv_helpers_dx12
 {
@@ -117,16 +118,16 @@ public:
 
   /// Fallback layer implementation
   void ComputeASBufferSizes(
-	  ID3D12RaytracingFallbackDevice* device, /// Device on which the build will be performed
-	  bool allowUpdate,              /// If true, the resulting acceleration structure will
-									 /// allow iterative updates
-	  UINT64* scratchSizeInBytes,    /// Required scratch memory on the GPU to
-									 /// build the acceleration structure
-	  UINT64* resultSizeInBytes,     /// Required GPU memory to store the
-									 /// acceleration structure
-	  UINT64* descriptorsSizeInBytes /// Required GPU memory to store instance
-									 /// descriptors, containing the matrices,
-									 /// indices etc.
+      ID3D12RaytracingFallbackDevice* device, /// Device on which the build will be performed
+      bool allowUpdate,              /// If true, the resulting acceleration structure will
+                                     /// allow iterative updates
+      UINT64* scratchSizeInBytes,    /// Required scratch memory on the GPU to
+                                     /// build the acceleration structure
+      UINT64* resultSizeInBytes,     /// Required GPU memory to store the
+                                     /// acceleration structure
+      UINT64* descriptorsSizeInBytes /// Required GPU memory to store instance
+                                     /// descriptors, containing the matrices,
+                                     /// indices etc.
   );
 
   /// Enqueue the construction of the acceleration structure on a command list,
@@ -151,25 +152,20 @@ public:
 
   /// Fallback layer implementation
   void Generate(
-	  ID3D12GraphicsCommandList* commandList, /// Command list on which the build will be enqueued
-	  ID3D12RaytracingFallbackCommandList*
-	  rtCmdList,                     /// Same command list, casted into a raytracing list. This
-									 /// will not be needed anymore with Windows 10 RS5.
-	  ID3D12Resource* scratchBuffer,     /// Scratch buffer used by the builder to
-										 /// store temporary data
-	  ID3D12Resource* resultBuffer,      /// Result buffer storing the acceleration structure
-	  ID3D12Resource* descriptorsBuffer, /// Auxiliary result buffer containing the instance
-										 /// descriptors, has to be in upload heap
-      // For CreateFallbackWrappedPointer()
-	  ID3D12Device *device,
-	  ID3D12RaytracingFallbackDevice *fallbackDevice,
-	  ID3D12DescriptorHeap *descriptorHeap,
-	  UINT &descriptorsAllocated,
-	  UINT descriptorSize,
-
-	  bool updateOnly = false, /// If true, simply refit the existing acceleration structure
-	  ID3D12Resource* previousResult = nullptr /// Optional previous acceleration structure, used
-											   /// if an iterative update is requested
+      ID3D12GraphicsCommandList* commandList, /// Command list on which the build will be enqueued
+      ID3D12RaytracingFallbackCommandList*
+          rtCmdList,                     /// Same command list, casted into a raytracing list. This
+                                         /// will not be needed anymore with Windows 10 RS5.
+      ID3D12Resource* scratchBuffer,     /// Scratch buffer used by the builder to
+                                         /// store temporary data
+      ID3D12Resource* resultBuffer,      /// Result buffer storing the acceleration structure
+      ID3D12Resource* descriptorsBuffer, /// Auxiliary result buffer containing the instance
+                                         /// descriptors, has to be in upload heap
+      std::function<WRAPPED_GPU_POINTER(ID3D12Resource*, UINT)> 
+          createWrappedPtrFunc,
+      bool updateOnly = false, /// If true, simply refit the existing acceleration structure
+      ID3D12Resource* previousResult = nullptr /// Optional previous acceleration structure, used
+                                               /// if an iterative update is requested
   );
 
 private:
