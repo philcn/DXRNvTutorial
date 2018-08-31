@@ -83,6 +83,7 @@ void RayTracingPipelineGenerator::AddLibrary(IDxcBlob* dxilLibrary,
 void RayTracingPipelineGenerator::AddLibrary(const void *shaderBytecode, UINT bytecodeSize,
                                              const std::vector<std::wstring>& symbolExports)
 {
+  m_libraries.emplace_back(Library(shaderBytecode, bytecodeSize, symbolExports));
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -150,6 +151,7 @@ void RayTracingPipelineGenerator::SetMaxRecursionDepth(UINT maxDepth)
 //--------------------------------------------------------------------------------------------------
 //
 // Compiles the raytracing state object
+ID3D12StateObjectPrototype* RayTracingPipelineGenerator::Generate(ID3D12RootSignature* globalRootSignature)
 {
   // The pipeline is made of a set of sub-objects, representing the DXIL libraries, hit group
   // declarations, root signature associations, plus some configuration objects
