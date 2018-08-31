@@ -351,10 +351,11 @@ void DXRNvTutorialApp::CreateShaderBindingTable()
 
     mShaderTableGenerator.Reset();
 
-    // The pointer to the beginning of the heap is the only parameter required by shaders without root
-    // parameters
-    D3D12_GPU_DESCRIPTOR_HANDLE srvUavHeapHandle = mDescriptorHeap->GetGPUDescriptorHandleForHeapStart();
-    auto heapPointer = reinterpret_cast<UINT64*>(srvUavHeapHandle.ptr);
+    // Example of specifying root arguments for local root signature. Note that in fallback layer  
+    // root descriptors must be WRAPPED_GPU_POINTER's rather than D3D12_GPU_VIRTUAL_ADDRESS.
+    // D3D12_GPU_DESCRIPTOR_HANDLE srvUavHeapHandle = mDescriptorHeap->GetGPUDescriptorHandleForHeapStart();
+    // auto heapPointer = reinterpret_cast<UINT64*>(srvUavHeapHandle.ptr);
+    // mShaderTableGenerator.AddHitGroup(L"HitGroup", {heapPointer});
 
     mShaderTableGenerator.AddRayGenerationProgram(L"RayGen", {});
     mShaderTableGenerator.AddMissProgram(L"Miss", {});
@@ -365,11 +366,8 @@ void DXRNvTutorialApp::CreateShaderBindingTable()
     // Create the SBT on the upload heap. This is required as the helper will use mapping to write the
     // SBT contents. After the SBT compilation it could be copied to the default heap for performance.
     mShaderTable = nv_helpers_dx12::CreateBuffer(device, shaderTableSize, D3D12_RESOURCE_FLAG_NONE,
-        D3D12_RESOURCE_STATE_GENERIC_READ,
-        nv_helpers_dx12::kUploadHeapProps);
-    if (!mShaderTable) {
-        throw std::logic_error("Could not allocate shader table");
-    }
+                                                 D3D12_RESOURCE_STATE_GENERIC_READ, 
+                                                 nv_helpers_dx12::kUploadHeapProps);
 
     mShaderTableGenerator.Generate(mShaderTable.Get(), mFallbackStateObject.Get());
 }
